@@ -8,14 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"net"
-	"net/textproto"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/av/avutil"
 	"github.com/deepch/vdk/codec"
@@ -23,6 +15,14 @@ import (
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/rtsp/sdp"
 	"github.com/deepch/vdk/utils/bits/pio"
+	"io"
+	"log"
+	"net"
+	"net/textproto"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var ErrCodecDataChange = fmt.Errorf("rtsp: codec data change, please call HandleCodecDataChange()")
@@ -729,7 +729,6 @@ func (self *Stream) timeScale() int {
 
 func (self *Stream) makeCodecData() (err error) {
 	media := self.Sdp
-
 	if media.PayloadType >= 96 && media.PayloadType <= 127 {
 		switch media.Type {
 		case av.H264:
@@ -768,6 +767,8 @@ func (self *Stream) makeCodecData() (err error) {
 				err = fmt.Errorf("rtsp: aac sdp config invalid: %s", err)
 				return
 			}
+		default:
+			log.Fatalln("Fix Format may be raw PCM 97", media.PayloadType, media.Type)
 		}
 	} else {
 		switch media.PayloadType {
@@ -782,7 +783,6 @@ func (self *Stream) makeCodecData() (err error) {
 			return
 		}
 	}
-
 	return
 }
 
@@ -1110,7 +1110,6 @@ func (self *Client) Play() (err error) {
 	if err = self.WriteRequest(req); err != nil {
 		return
 	}
-
 	if self.allCodecDataReady() {
 		self.stage = stageCodecDataDone
 	} else {
