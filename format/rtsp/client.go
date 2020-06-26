@@ -200,6 +200,9 @@ func (self *Client) SendRtpKeepalive() (err error) {
 				Method: "OPTIONS",
 				Uri:    self.requestUri,
 			}
+			if self.session != "" {
+				req.Header = append(req.Header, "Session: "+self.session)
+			}
 			if err = self.WriteRequest(req); err != nil {
 				return
 			}
