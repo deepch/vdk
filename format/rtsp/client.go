@@ -310,12 +310,42 @@ func (self *Client) handleResp(res *Response) (err error) {
 			self.session = fields[0]
 		}
 	}
+	if res.StatusCode == 302 {
+		if err = self.handle302(res); err != nil {
+			return
+		}
+	}
 	if res.StatusCode == 401 {
 		if err = self.handle401(res); err != nil {
 			return
 		}
 	}
 	return
+}
+
+func (self *Client) handle302(res *Response) (err error) {
+	/*
+		RTSP/1.0 200 OK
+		CSeq: 302
+	*/
+	newLocation := res.Headers.Get("Location")
+	fmt.Printf("\tRedirecting stream to other location: %s\n", newLocation)
+
+	err = self.Close()
+	if err != nil {
+		return err
+	}
+
+	newConnect, err := Dial(newLocation)
+	if err != nil {
+		return err
+	}
+
+	self.requestUri = newLocation
+	self.conn = newConnect.conn
+	self.brconn = newConnect.brconn
+
+	return err
 }
 
 func (self *Client) handle401(res *Response) (err error) {
