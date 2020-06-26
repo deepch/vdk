@@ -154,6 +154,9 @@ func (self *Muxer) WriteHeader(streams []av.CodecData) (err error) {
 }
 
 func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
+	if int(pkt.Idx) >= len(self.streams) {
+		return fmt.Errorf("Wrong stream index: %d", pkt.Idx)
+	}
 	stream := self.streams[pkt.Idx]
 	pkt.Time += time.Second
 
