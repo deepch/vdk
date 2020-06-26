@@ -8,13 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/deepch/vdk/av"
-	"github.com/deepch/vdk/av/avutil"
-	"github.com/deepch/vdk/codec"
-	"github.com/deepch/vdk/codec/aacparser"
-	"github.com/deepch/vdk/codec/h264parser"
-	"github.com/deepch/vdk/format/rtsp/sdp"
-	"github.com/deepch/vdk/utils/bits/pio"
 	"io"
 	"log"
 	"net"
@@ -23,6 +16,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/deepch/vdk/av"
+	"github.com/deepch/vdk/av/avutil"
+	"github.com/deepch/vdk/codec"
+	"github.com/deepch/vdk/codec/aacparser"
+	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/format/rtsp/sdp"
+	"github.com/deepch/vdk/utils/bits/pio"
 )
 
 var ErrCodecDataChange = fmt.Errorf("rtsp: codec data change, please call HandleCodecDataChange()")
@@ -309,12 +310,42 @@ func (self *Client) handleResp(res *Response) (err error) {
 			self.session = fields[0]
 		}
 	}
+	if res.StatusCode == 302 {
+		if err = self.handle302(res); err != nil {
+			return
+		}
+	}
 	if res.StatusCode == 401 {
 		if err = self.handle401(res); err != nil {
 			return
 		}
 	}
 	return
+}
+
+func (self *Client) handle302(res *Response) (err error) {
+	/*
+		RTSP/1.0 200 OK
+		CSeq: 302
+	*/
+	newLocation := res.Headers.Get("Location")
+	fmt.Printf("\tRedirecting stream to other location: %s\n", newLocation)
+
+	err = self.Close()
+	if err != nil {
+		return err
+	}
+
+	newConnect, err := Dial(newLocation)
+	if err != nil {
+		return err
+	}
+
+	self.requestUri = newLocation
+	self.conn = newConnect.conn
+	self.brconn = newConnect.brconn
+
+	return err
 }
 
 func (self *Client) handle401(res *Response) (err error) {
@@ -440,11 +471,15 @@ func (self *Client) findRTSP() (block []byte, data []byte, err error) {
 			}
 			if blocklen, _, ok := self.parseBlockHeader(peek); ok {
 				left := blocklen + 4 - len(peek)
-				block = append(peek, make([]byte, left)...)
-				if _, err = io.ReadFull(self.brconn, block[len(peek):]); err != nil {
+				if left >= 0 {
+					block = append(peek, make([]byte, left)...)
+					if _, err = io.ReadFull(self.brconn, block[len(peek):]); err != nil {
+						return
+					}
 					return
+				} else {
+					fmt.Println("Left < 0 ", blocklen, len(peek), left)
 				}
-				return
 			}
 			stat = 0
 			peek = _peek[0:0]
