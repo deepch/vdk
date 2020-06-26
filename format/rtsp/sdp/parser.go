@@ -110,7 +110,10 @@ func Parse(content string) (sess Session, medias []Media) {
 					}
 				}
 
+			default:
+				media = nil
 			}
+
 		}
 	}
 	return
