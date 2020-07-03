@@ -47,6 +47,8 @@ func Parse(content string) (sess Session, medias []Media) {
 						if len(mfields) >= 3 {
 							media.PayloadType, _ = strconv.Atoi(mfields[2])
 						}
+					default:
+						media = nil
 					}
 				}
 
@@ -110,8 +112,6 @@ func Parse(content string) (sess Session, medias []Media) {
 					}
 				}
 
-			default:
-				media = nil
 			}
 
 		}
