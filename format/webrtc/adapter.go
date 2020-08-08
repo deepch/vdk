@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"time"
+
+	"github.com/pion/webrtc/v2"
 
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/h264parser"
-	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v3/pkg/media"
+	"github.com/pion/webrtc/v2/pkg/media"
 )
 
 type Muxer struct {
-	streams map[int8]*Stream
+	streams   map[int8]*Stream
+	Connected bool
 }
 type Stream struct {
 	codec av.CodecData
@@ -51,6 +54,12 @@ func (self *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string, er
 	if err != nil {
 		return "", err
 	}
+	timer1 := time.NewTimer(time.Second * 2)
+	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
+		d.OnMessage(func(msg webrtc.DataChannelMessage) {
+			timer1.Reset(2 * time.Second)
+		})
+	})
 	for i, i2 := range streams {
 		var track *webrtc.Track
 		if i2.Type().IsVideo() {
@@ -78,11 +87,10 @@ func (self *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string, er
 		}
 		self.streams[int8(i)] = &Stream{track: track, codec: i2}
 	}
-	//iceConnectedCtx, iceConnectedCtxCancel := context.WithCancel(context.Background())
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		fmt.Printf("Connection State has changed %s \n", connectionState.String())
 		if connectionState == webrtc.ICEConnectionStateConnected {
-			//	iceConnectedCtxCancel()
+			self.Connected = true
 		}
 	})
 	if err = peerConnection.SetRemoteDescription(offer); err != nil {
@@ -92,12 +100,9 @@ func (self *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string, er
 	if err != nil {
 		return "", err
 	}
-	//gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
 	if err = peerConnection.SetLocalDescription(answer); err != nil {
 		return "", err
 	}
-	//<-gatherComplete
-
 	return base64.StdEncoding.EncodeToString([]byte(answer.SDP)), nil
 }
 
