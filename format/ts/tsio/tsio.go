@@ -2,10 +2,9 @@ package tsio
 
 import (
 	"fmt"
+	"github.com/deepch/vdk/utils/bits/pio"
 	"io"
 	"time"
-
-	"github.com/deepch/vdk/utils/bits/pio"
 )
 
 const (
@@ -514,17 +513,116 @@ func NewTSWriter(pid uint16) *TSWriter {
 	}
 	return w
 }
+//TSHeader func
+type TSHeader struct {
+	PID                    uint
+	PCR                    uint64
+	OPCR                   uint64
+	ContinuityCounter      uint
+	PayloadUnitStart       bool
+	DiscontinuityIndicator bool
+	RandomAccessIndicator  bool
+	HeaderLength           uint
+}
+//WriteTSHeader func
+func WriteTSHeader(w io.Writer, element TSHeader, dataLength int) (written int, err error) {
+	var flags, extFlags uint
 
+	flags = 0x47 << 24
+	flags |= 0x10
+	if element.PayloadUnitStart {
+		flags |= 0x400000
+	}
+
+	flags |= (element.PID & 0x1fff) << 8
+	flags |= element.ContinuityCounter & 0xf
+
+	const PCR = 0x10
+	const OPCR = 0x08
+	const EXT = 0x20
+
+	if element.PCR != 0 {
+		extFlags |= PCR
+	}
+	if element.OPCR != 0 {
+		extFlags |= OPCR
+	}
+	if element.RandomAccessIndicator {
+		extFlags |= 0x40
+	}
+	if element.DiscontinuityIndicator {
+		extFlags |= 0x80
+	}
+	if extFlags != 0 {
+		flags |= EXT
+	}
+	if dataLength < 184 {
+		flags |= EXT
+	}
+	if err = WriteUInt(w, flags, 4); err != nil {
+		return
+	}
+	written += 4
+
+	if flags&EXT != 0 {
+		var length uint
+		length = 1
+		if extFlags&PCR != 0 {
+			length += 6
+		}
+		if extFlags&OPCR != 0 {
+			length += 6
+		}
+		paddingLength := 0
+		if int(length)+5+dataLength < 188 {
+			paddingLength = 188 - dataLength - 5 - int(length)
+			length = 188 - uint(dataLength) - 5
+		}
+		if err = WriteUInt(w, length, 1); err != nil {
+			return
+		}
+		if err = WriteUInt(w, extFlags, 1); err != nil {
+			return
+		}
+		if extFlags&PCR != 0 {
+			if err = WriteUInt64(w, PCRToUInt(element.PCR), 6); err != nil {
+				return
+			}
+		}
+		if extFlags&OPCR != 0 {
+			if err = WriteUInt64(w, PCRToUInt(element.OPCR), 6); err != nil {
+				return
+			}
+		}
+		if paddingLength > 0 {
+			if err = WriteRepeatVal(w, 0xff, paddingLength); err != nil {
+				return
+			}
+		}
+		written += int(length) + 1
+	}
+	return
+}
 func (self *TSWriter) WritePackets(w io.Writer, datav [][]byte, pcr time.Duration, sync bool, paddata bool) (err error) {
 	datavlen := pio.VecLen(datav)
 	writev := make([][]byte, len(datav))
 	writepos := 0
 
 	for writepos < datavlen {
+
 		self.tshdr[1] = self.tshdr[1] & 0x1f
 		self.tshdr[3] = byte(self.ContinuityCounter)&0xf | 0x30
 		self.tshdr[5] = 0 // flags
 		hdrlen := 6
+		//pid := uint16((self.tshdr[1]&0x1f))<<8 | uint16(self.tshdr[2])
+		//if pid != 256 {
+			//self.tshdr[3] = 0x01
+
+			//self.tshdr[3] = 0x47
+			//self.tshdr[4]
+		//	log.Println(self.tshdr[:5])
+		//	log.Println("pid", pid,self.tshdr[3] )
+		//}
 		self.ContinuityCounter++
 
 		if writepos == 0 {
@@ -586,4 +684,41 @@ func ParseTSHeader(tshdr []byte) (pid uint16, start bool, iskeyframe bool, hdrle
 		iskeyframe = tshdr[5]&0x40 != 0
 	}
 	return
+}
+func makeRepeatValBytes(val byte, n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = val
+	}
+	return b
+}
+
+//WriteRepeatVal func
+func WriteRepeatVal(w io.Writer, val byte, n int) (err error) {
+	_, err = w.Write(makeRepeatValBytes(val, n))
+	return
+}
+
+//WriteUInt64 func
+func WriteUInt64(w io.Writer, val uint64, n int) (err error) {
+	var b [8]byte
+	for i := n - 1; i >= 0; i-- {
+		b[i] = byte(val)
+		val >>= 8
+	}
+	if _, err = w.Write(b[:n]); err != nil {
+		return
+	}
+	return
+}
+
+//WriteUInt func
+func WriteUInt(w io.Writer, val uint, n int) (err error) {
+	return WriteUInt64(w, uint64(val), n)
+}
+//PCRToUInt func
+func PCRToUInt(pcr uint64) uint64 {
+	base := pcr / 300
+	ext := pcr % 300
+	return base<<15 | 0x3f<<9 | ext
 }

@@ -69,7 +69,7 @@ func (self *Muxer) newStream(idx int, codec av.CodecData) (err error) {
 
 func (self *Muxer) writePaddingTSPackets(tsw *tsio.TSWriter) (err error) {
 	for tsw.ContinuityCounter&0xf != 0x0 {
-		if err = tsw.WritePackets(self.w, self.datav[:0], 0, false, true); err != nil {
+		if err = tsw.WritePackets(self.w, self.datav[:1], 0, false, true); err != nil {
 			return
 		}
 	}
