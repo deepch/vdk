@@ -120,7 +120,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		if (i2.AVType != VIDEO && i2.AVType != AUDIO) || (client.options.DisableAudio && i2.AVType == AUDIO) {
 			continue
 		}
-		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(ch) + "-" + strconv.Itoa(ch+1)}, client.control+i2.Control, false, false)
+		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(ch) + "-" + strconv.Itoa(ch+1)}, client.ControlTrack(i2.Control), false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +148,13 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	}
 	go client.startStream()
 	return client, nil
+}
+
+func (client *RTSPClient) ControlTrack(track string) string {
+	if strings.Contains(track, "rtsp://") {
+		return track
+	}
+	return client.control + track
 }
 
 func (client *RTSPClient) startStream() {
@@ -469,7 +476,6 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			switch {
 			case naluType >= 1 && naluType <= 5:
 				client.Println("Fix Stream IDX")
-
 				retmap = append(retmap, &av.Packet{
 					Data:            append(binSize(len(nal)), nal...),
 					CompositionTime: time.Duration(1) * time.Millisecond,
@@ -527,7 +533,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 func (client *RTSPClient) CodecUpdateSPS(val []byte) {
 	if bytes.Compare(val, client.sps) != 0 {
 		if len(client.sps) > 0 && len(client.pps) > 0 {
-			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(client.sps, client.pps)
+			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(val, client.pps)
 			if err != nil {
 				client.Println("Parse Codec Data Error", err)
 				return
@@ -550,7 +556,7 @@ func (client *RTSPClient) CodecUpdateSPS(val []byte) {
 func (client *RTSPClient) CodecUpdatePPS(val []byte) {
 	if bytes.Compare(val, client.pps) != 0 {
 		if len(client.sps) > 0 && len(client.pps) > 0 {
-			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(client.sps, client.pps)
+			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(client.sps, val)
 			if err != nil {
 				client.Println("Parse Codec Data Error", err)
 				return
