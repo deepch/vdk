@@ -475,7 +475,6 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			naluType := nal[0] & 0x1f
 			switch {
 			case naluType >= 1 && naluType <= 5:
-				client.Println("Fix Stream IDX")
 				retmap = append(retmap, &av.Packet{
 					Data:            append(binSize(len(nal)), nal...),
 					CompositionTime: time.Duration(1) * time.Millisecond,
@@ -516,7 +515,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				}
 
 			default:
-				client.Println("Unsupported NAL Type")
+				client.Println("Unsupported NAL Type", naluType)
 			}
 		}
 		if len(retmap) > 0 {
