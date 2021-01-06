@@ -43,34 +43,34 @@ const (
 )
 
 type RTSPClient struct {
-	control         string
-	seq             int
-	session         string
-	realm           string
-	nonce           string
-	username        string
-	password        string
-	startVideoTS    int64
-	startAudioTS    int64
-	videoID         int
-	audioID         int
-	mediaSDP        []sdp.Media
-	SDPRaw          []byte
-	conn            net.Conn
-	connRW          *bufio.ReadWriter
-	pURL            *url.URL
-	headers         map[string]string
-	Signals         chan int
-	OutgoingProxy   chan *[]byte
-	OutgoingPacket  chan *av.Packet
-	clientDigest    bool
-	clientBasic     bool
-	fuStarted       bool
-	options         RTSPClientOptions
-	BufferRtpPacket *bytes.Buffer
-	sps             []byte
-	pps             []byte
-	CodecData       []av.CodecData
+	control             string
+	seq                 int
+	session             string
+	realm               string
+	nonce               string
+	username            string
+	password            string
+	startVideoTS        int64
+	startAudioTS        int64
+	videoID             int
+	audioID             int
+	mediaSDP            []sdp.Media
+	SDPRaw              []byte
+	conn                net.Conn
+	connRW              *bufio.ReadWriter
+	pURL                *url.URL
+	headers             map[string]string
+	Signals             chan int
+	OutgoingProxyQueue  chan *[]byte
+	OutgoingPacketQueue chan *av.Packet
+	clientDigest        bool
+	clientBasic         bool
+	fuStarted           bool
+	options             RTSPClientOptions
+	BufferRtpPacket     *bytes.Buffer
+	sps                 []byte
+	pps                 []byte
+	CodecData           []av.CodecData
 }
 
 type RTSPClientOptions struct {
@@ -79,18 +79,19 @@ type RTSPClientOptions struct {
 	DialTimeout      time.Duration
 	ReadWriteTimeout time.Duration
 	DisableAudio     bool
+	OutgoingProxy    bool
 }
 
 func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	client := &RTSPClient{
-		headers:         make(map[string]string),
-		Signals:         make(chan int, 100),
-		OutgoingProxy:   make(chan *[]byte, 3000),
-		OutgoingPacket:  make(chan *av.Packet, 3000),
-		BufferRtpPacket: bytes.NewBuffer([]byte{}),
-		videoID:         0,
-		audioID:         2,
-		options:         options,
+		headers:             make(map[string]string),
+		Signals:             make(chan int, 100),
+		OutgoingProxyQueue:  make(chan *[]byte, 3000),
+		OutgoingPacketQueue: make(chan *av.Packet, 3000),
+		BufferRtpPacket:     bytes.NewBuffer([]byte{}),
+		videoID:             0,
+		audioID:             2,
+		options:             options,
 	}
 	client.headers["User-Agent"] = "Lavf58.20.100"
 	err := client.parseURL(html.UnescapeString(client.options.URL))
@@ -205,22 +206,24 @@ func (client *RTSPClient) startStream() {
 				return
 			}
 			//atomic.AddInt64(&client.Bitrate, int64(length+4))
-			if len(client.OutgoingProxy) < 2000 {
-				client.OutgoingProxy <- &content
-			} else {
-				client.Println("RTSP Client OutgoingProxy Chanel Full")
-				return
+			if client.options.OutgoingProxy {
+				if len(client.OutgoingProxyQueue) < 2000 {
+					client.OutgoingProxyQueue <- &content
+				} else {
+					client.Println("RTSP Client OutgoingProxy Chanel Full")
+					return
+				}
 			}
 			pkt, got := client.RTPDemuxer(&content)
 			if !got {
 				continue
 			}
 			for _, i2 := range pkt {
-				if len(client.OutgoingPacket) > 2000 {
+				if len(client.OutgoingPacketQueue) > 2000 {
 					client.Println("RTSP Client OutgoingPacket Chanel Full")
 					return
 				}
-				client.OutgoingPacket <- i2
+				client.OutgoingPacketQueue <- i2
 			}
 		case 0x52:
 			var responseTmp []byte
