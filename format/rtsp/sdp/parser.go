@@ -47,6 +47,12 @@ func Parse(content string) (sess Session, medias []Media) {
 						if len(mfields) >= 3 {
 							media.PayloadType, _ = strconv.Atoi(mfields[2])
 						}
+						switch media.PayloadType {
+						case 0:
+							media.Type = av.PCM_MULAW
+						case 8:
+							media.Type = av.PCM_ALAW
+						}
 					default:
 						media = nil
 					}
@@ -75,6 +81,8 @@ func Parse(content string) (sess Session, medias []Media) {
 							switch strings.ToUpper(key) {
 							case "MPEG4-GENERIC":
 								media.Type = av.AAC
+							case "L16":
+								media.Type = av.PCM
 							case "H264":
 								media.Type = av.H264
 							}

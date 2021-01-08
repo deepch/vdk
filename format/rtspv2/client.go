@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/deepch/vdk/av"
+	"github.com/deepch/vdk/codec"
+	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/rtsp/sdp"
 )
@@ -54,6 +56,8 @@ type RTSPClient struct {
 	startAudioTS        int64
 	videoID             int
 	audioID             int
+	videoIDX            int8
+	audioIDX            int8
 	mediaSDP            []sdp.Media
 	SDPRaw              []byte
 	conn                net.Conn
@@ -71,6 +75,7 @@ type RTSPClient struct {
 	sps                 []byte
 	pps                 []byte
 	CodecData           []av.CodecData
+	PCMTime             int64
 }
 
 type RTSPClientOptions struct {
@@ -91,6 +96,8 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		BufferRtpPacket:     bytes.NewBuffer([]byte{}),
 		videoID:             0,
 		audioID:             2,
+		videoIDX:            0,
+		audioIDX:            1,
 		options:             options,
 	}
 	client.headers["User-Agent"] = "Lavf58.20.100"
@@ -131,6 +138,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 					client.sps = i2.SpropParameterSets[0]
 					client.pps = i2.SpropParameterSets[1]
 					client.CodecData = append(client.CodecData, codecData)
+					client.videoIDX = int8(len(client.CodecData) - 1)
 				}
 			} else {
 				client.Println("SDP Video Codec Type Not Supported", i2.Type)
@@ -139,6 +147,26 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		}
 		if i2.AVType == AUDIO {
 			client.audioID = ch
+			var CodecData av.AudioCodecData
+			switch i2.Type {
+			case av.AAC:
+				CodecData, err = aacparser.NewCodecDataFromMPEG4AudioConfigBytes(i2.Config)
+				if err == nil {
+					client.Println("Audio AAC bad config")
+				}
+			case av.PCM_MULAW:
+				CodecData = codec.NewPCMMulawCodecData()
+			case av.PCM_ALAW:
+				CodecData = codec.NewPCMMulawCodecData()
+			case av.PCM:
+				CodecData = codec.NewPCMCodecData()
+			default:
+				client.Println("Audio Codec", i2.Type, "not supported")
+			}
+			if CodecData != nil {
+				client.CodecData = append(client.CodecData, CodecData)
+				client.audioIDX = int8(len(client.CodecData) - 1)
+			}
 		}
 		ch += 2
 	}
@@ -481,7 +509,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				retmap = append(retmap, &av.Packet{
 					Data:            append(binSize(len(nal)), nal...),
 					CompositionTime: time.Duration(1) * time.Millisecond,
-					Idx:             0,
+					Idx:             client.videoIDX,
 					IsKeyFrame:      naluType == 5,
 					Time:            time.Duration(timestamp/90) * time.Millisecond,
 				})
@@ -510,7 +538,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						retmap = append(retmap, &av.Packet{
 							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
 							CompositionTime: time.Duration(1) * time.Millisecond,
-							Idx:             0,
+							Idx:             client.videoIDX,
 							IsKeyFrame:      naluTypef == 5,
 							Time:            time.Duration(timestamp/90) * time.Millisecond,
 						})
@@ -525,7 +553,21 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			return retmap, true
 		}
 	case client.audioID:
-		client.Println("Audio Unsupported try report to https://github.com/deepch/vdk", padding, extension, timestamp)
+		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
+		var retmap []*av.Packet
+		for _, nal := range nalRaw {
+			//client.PCMTime += int64(float32(1000) / (float32(8000) / float32(len(nal))))
+			retmap = append(retmap, &av.Packet{
+				Data:            append(binSize(len(nal)), nal...),
+				CompositionTime: time.Duration(1) * time.Millisecond,
+				Idx:             client.audioIDX,
+				IsKeyFrame:      false,
+				Time:            time.Duration(timestamp/8) * time.Millisecond,
+			})
+		}
+		if len(retmap) > 0 {
+			return retmap, true
+		}
 	default:
 		client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
 	}

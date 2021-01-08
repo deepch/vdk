@@ -116,11 +116,13 @@ type CodecType uint32
 
 var (
 	H264       = MakeVideoCodecType(avCodecTypeMagic + 1)
+	H265       = MakeVideoCodecType(avCodecTypeMagic + 2)
 	AAC        = MakeAudioCodecType(avCodecTypeMagic + 1)
 	PCM_MULAW  = MakeAudioCodecType(avCodecTypeMagic + 2)
 	PCM_ALAW   = MakeAudioCodecType(avCodecTypeMagic + 3)
 	SPEEX      = MakeAudioCodecType(avCodecTypeMagic + 4)
 	NELLYMOSER = MakeAudioCodecType(avCodecTypeMagic + 5)
+	PCM        = MakeAudioCodecType(avCodecTypeMagic + 6)
 )
 
 const codecTypeAudioBit = 0x1
@@ -140,6 +142,8 @@ func (self CodecType) String() string {
 		return "SPEEX"
 	case NELLYMOSER:
 		return "NELLYMOSER"
+	case PCM:
+		return "PCM"
 	}
 	return ""
 }

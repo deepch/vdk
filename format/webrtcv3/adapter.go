@@ -36,7 +36,7 @@ var (
 	ErrorCodecNotSupported = errors.New("WebRTC Codec Not Supported")
 	ErrorClientOffline     = errors.New("WebRTC Client Offline")
 	ErrorNotTrackAvailable = errors.New("WebRTC Not Track Available")
-	ErrorIgnoreAudioTrack  = errors.New("WebRTC Ignore Audio Track codec not supported WebRTC")
+	ErrorIgnoreAudioTrack  = errors.New("WebRTC Ignore Audio Track codec not supported WebRTC support only PCM_ALAW or PCM_MULAW")
 )
 
 type Muxer struct {
@@ -192,7 +192,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 		default:
 			return ErrorCodecNotSupported
 		}
-		err = tmp.track.WriteSample(media.Sample{Data: pkt.Data, Duration: pkt.Time - tmp.ts})
+		err = tmp.track.WriteSample(media.Sample{Data: pkt.Data, Duration: pkt.Time - element.streams[pkt.Idx].ts})
 		if err == nil {
 			element.streams[pkt.Idx].ts = pkt.Time
 			WritePacketSuccess = true
@@ -213,8 +213,10 @@ func (element *Muxer) WaitCloser() {
 			}
 			waitT.Reset(time.Second * 10)
 		case <-element.StreamACK.C:
+			log.Println("Stream Not Send Video Close")
 			element.Close()
 		case <-element.ClientACK.C:
+			log.Println("Client Not Send ACK (probably the browser is minimized) or tab not active Close client")
 			element.Close()
 		}
 	}

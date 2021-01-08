@@ -37,6 +37,12 @@ func NewPCMMulawCodecData() av.AudioCodecData {
 	}
 }
 
+func NewPCMCodecData() av.AudioCodecData {
+	return PCMUCodecData{
+		typ: av.PCM,
+	}
+}
+
 func NewPCMAlawCodecData() av.AudioCodecData {
 	return PCMUCodecData{
 		typ: av.PCM_ALAW,
