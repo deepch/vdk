@@ -79,7 +79,7 @@ func (self *Muxer) newStream(codec av.CodecData) (err error) {
 		stream.sample.SyncSample = &mp4io.SyncSample{}
 		stream.timeScale = 90000
 	case av.AAC:
-		stream.timeScale = 8000
+		stream.timeScale = int64(codec.(av.AudioCodecData).SampleRate())
 	}
 
 	stream.muxer = self
@@ -179,10 +179,12 @@ func (self *Stream) fillTrackAtom() (err error) {
 		self.sample.SampleDesc.MP4ADesc = &mp4io.MP4ADesc{
 			DataRefIdx:       1,
 			NumberOfChannels: int16(codec.ChannelLayout().Count()),
-			SampleSize:       16,
+			SampleSize:       int16(codec.SampleFormat().BytesPerSample() * 4),
 			SampleRate:       float64(codec.SampleRate()),
 			Unknowns:         []mp4io.Atom{self.buildEsds(codec.MPEG4AudioConfigBytes())},
 		}
+		//log.Fatalln(codec.MPEG4AudioConfigBytes())
+		//log.Fatalln(codec.SampleFormat().BytesPerSample())
 		self.trackAtom.Header.Volume = 1
 		self.trackAtom.Header.AlternateGroup = 1
 		self.trackAtom.Header.Duration = 0
@@ -269,6 +271,9 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 	ts := time.Duration(0)
 	if stream.lastpkt != nil {
 		ts = pkt.Time - stream.lastpkt.Time
+	}
+	if stream.CodecData.Type().IsAudio() {
+		pkt.Data = pkt.Data[4:]
 	}
 	got, buf, err := stream.writePacketV2(pkt, ts, 5)
 	stream.lastpkt = &pkt

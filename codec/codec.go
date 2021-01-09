@@ -26,7 +26,7 @@ func (self OpusCodecData) ChannelLayout() av.ChannelLayout {
 }
 
 func (self OpusCodecData) PacketDuration(data []byte) (time.Duration, error) {
-	return time.Duration(1000) * time.Second / time.Duration(self.SampleRate_), nil
+	return time.Duration(20) * time.Millisecond, nil
 }
 
 func (self OpusCodecData) SampleFormat() av.SampleFormat {

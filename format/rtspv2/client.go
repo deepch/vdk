@@ -77,7 +77,9 @@ type RTSPClient struct {
 	CodecData           []av.CodecData
 	AudioTimeLine       time.Duration
 	AudioTimeScale      int64
-	audioCodec          string
+	audioCodec          av.CodecType
+	PreAudioTS          int64
+	PreVideoTS          int64
 }
 
 type RTSPClientOptions struct {
@@ -180,7 +182,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 			if CodecData != nil {
 				client.CodecData = append(client.CodecData, CodecData)
 				client.audioIDX = int8(len(client.CodecData) - 1)
-				client.audioCodec = CodecData.Type().String()
+				client.audioCodec = CodecData.Type()
 				if i2.TimeScale != 0 {
 					client.AudioTimeScale = int64(i2.TimeScale)
 				}
@@ -227,7 +229,7 @@ func (client *RTSPClient) startStream() {
 			timer = time.Now()
 		}
 		if !fixed {
-			nb, err := io.ReadFull(client.conn, header)
+			nb, err := io.ReadFull(client.connRW, header)
 			if err != nil || nb != 4 {
 				client.Println("RTSP Client RTP Read Header", err)
 				return
@@ -246,7 +248,7 @@ func (client *RTSPClient) startStream() {
 			content[1] = header[1]
 			content[2] = header[2]
 			content[3] = header[3]
-			n, rerr := io.ReadFull(client.conn, content[4:length+4])
+			n, rerr := io.ReadFull(client.connRW, content[4:length+4])
 			if rerr != nil || n != int(length) {
 				client.Println("RTSP Client RTP ReadFull", err)
 				return
@@ -274,7 +276,7 @@ func (client *RTSPClient) startStream() {
 		case 0x52:
 			var responseTmp []byte
 			for {
-				n, rerr := io.ReadFull(client.conn, oneb)
+				n, rerr := io.ReadFull(client.connRW, oneb)
 				if rerr != nil || n != 1 {
 					client.Println("RTSP Client RTP Read Keep-Alive Header", rerr)
 					return
@@ -288,7 +290,7 @@ func (client *RTSPClient) startStream() {
 							return
 						}
 						cont := make([]byte, si)
-						_, err = io.ReadFull(client.conn, cont)
+						_, err = io.ReadFull(client.connRW, cont)
 						if err != nil {
 							client.Println("RTSP Client RTP Read Keep-Alive ReadFull", err)
 							return
@@ -512,6 +514,9 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	offset += 4
 	switch int(content[1]) {
 	case client.videoID:
+		if client.PreVideoTS == 0 {
+			client.PreVideoTS = timestamp
+		}
 		if client.BufferRtpPacket.Len() > 4048576 {
 			client.Println("Big Buffer Flush")
 			client.BufferRtpPacket.Truncate(0)
@@ -529,6 +534,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 					CompositionTime: time.Duration(1) * time.Millisecond,
 					Idx:             client.videoIDX,
 					IsKeyFrame:      naluType == 5,
+					Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 					Time:            time.Duration(timestamp/90) * time.Millisecond,
 				})
 			case naluType == 7:
@@ -556,40 +562,63 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						retmap = append(retmap, &av.Packet{
 							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
 							CompositionTime: time.Duration(1) * time.Millisecond,
+							Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 							Idx:             client.videoIDX,
 							IsKeyFrame:      naluTypef == 5,
 							Time:            time.Duration(timestamp/90) * time.Millisecond,
 						})
 					}
 				}
-
 			default:
 				client.Println("Unsupported NAL Type", naluType)
 			}
 		}
+
 		if len(retmap) > 0 {
+			client.PreVideoTS = timestamp
 			return retmap, true
 		}
 	case client.audioID:
+		if client.PreAudioTS == 0 {
+			client.PreAudioTS = timestamp
+		}
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
-			if client.audioCodec == av.PCM_MULAW.String() || client.audioCodec == av.PCM_ALAW.String() || client.audioCodec == av.PCM.String() {
-				client.AudioTimeLine += time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-			} else if client.audioCodec == av.OPUS.String() {
-				client.AudioTimeLine += time.Duration(20) * time.Millisecond
-			} else {
-				client.AudioTimeLine = time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond
+			var duration time.Duration
+			switch client.audioCodec {
+			case av.PCM_MULAW:
+				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
+				client.AudioTimeLine += duration
+			case av.PCM_ALAW:
+				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
+				client.AudioTimeLine += duration
+			case av.OPUS:
+				duration = time.Duration(20) * time.Millisecond
+				client.AudioTimeLine += duration
+			case av.AAC:
+				if nal[1] == 32 {
+					return nil, false
+				}
+				nal = nal[4:]
+				if _, _, _, _, err := aacparser.ParseADTSHeader(nal); err == nil {
+					nal = nal[7:]
+				}
+				duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000) * time.Millisecond
+				client.AudioTimeLine += duration
 			}
+
 			retmap = append(retmap, &av.Packet{
 				Data:            append(binSize(len(nal)), nal...),
 				CompositionTime: time.Duration(1) * time.Millisecond,
+				Duration:        duration,
 				Idx:             client.audioIDX,
 				IsKeyFrame:      false,
 				Time:            client.AudioTimeLine,
 			})
 		}
 		if len(retmap) > 0 {
+			client.PreAudioTS = timestamp
 			return retmap, true
 		}
 	default:
