@@ -20,6 +20,7 @@ type Media struct {
 	TimeScale          int
 	Control            string
 	Rtpmap             int
+	ChannelCount       int
 	Config             []byte
 	SpropParameterSets [][]byte
 	PayloadType        int
@@ -83,6 +84,13 @@ func Parse(content string) (sess Session, medias []Media) {
 								media.Type = av.AAC
 							case "L16":
 								media.Type = av.PCM
+							case "OPUS":
+								media.Type = av.OPUS
+								if len(keyval) > 2 {
+									if i, err := strconv.Atoi(keyval[2]); err == nil {
+										media.ChannelCount = i
+									}
+								}
 							case "H264":
 								media.Type = av.H264
 							}

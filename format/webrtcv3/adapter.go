@@ -14,23 +14,6 @@ import (
 	"github.com/pion/webrtc/v3/pkg/media"
 )
 
-const (
-	// MimeTypeH264 H264 MIME type.
-	MimeTypeH264 = "video/h264"
-	// MimeTypeOpus Opus MIME type
-	MimeTypeOpus = "audio/opus"
-	// MimeTypeVP8 VP8 MIME type
-	MimeTypeVP8 = "video/vp8"
-	// MimeTypeVP9 VP9 MIME type
-	MimeTypeVP9 = "video/vp9"
-	// MimeTypeG722 G722 MIME type
-	MimeTypeG722 = "audio/G722"
-	// MimeTypePCMU PCMU MIME type
-	MimeTypePCMU = "audio/PCMU"
-	// MimeTypePCMA PCMA MIME type
-	MimeTypePCMA = "audio/PCMA"
-)
-
 var (
 	ErrorNotFound          = errors.New("WebRTC Stream Not Found")
 	ErrorCodecNotSupported = errors.New("WebRTC Codec Not Supported")
@@ -99,18 +82,22 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 				}
 			}
 		} else if i2.Type().IsAudio() {
-			AudioCodecString := MimeTypePCMU
+			AudioCodecString := webrtc.MimeTypePCMA
 			switch i2.Type() {
 			case av.PCM_ALAW:
-				AudioCodecString = MimeTypePCMA
+				AudioCodecString = webrtc.MimeTypePCMA
 			case av.PCM_MULAW:
-				AudioCodecString = MimeTypePCMU
+				AudioCodecString = webrtc.MimeTypePCMU
+			case av.OPUS:
+				AudioCodecString = webrtc.MimeTypeOpus
 			default:
 				log.Println(ErrorIgnoreAudioTrack)
 				continue
 			}
 			track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
-				MimeType: AudioCodecString,
+				MimeType:  AudioCodecString,
+				Channels:  uint16(i2.(av.AudioCodecData).ChannelLayout().Count()),
+				ClockRate: uint32(i2.(av.AudioCodecData).SampleRate()),
 			}, "pion-rtsp-audio", "pion-rtsp-audio")
 			if err != nil {
 				return "", err
@@ -162,6 +149,7 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 }
 
 func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
+	//log.Println("WritePacket", pkt.Time, element.stop, webrtc.ICEConnectionStateConnected, pkt.Idx, element.streams[pkt.Idx])
 	var WritePacketSuccess bool
 	defer func() {
 		if !WritePacketSuccess {
@@ -189,6 +177,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 			}
 		case av.PCM_MULAW:
 		case av.PCM_ALAW:
+		case av.OPUS:
 		default:
 			return ErrorCodecNotSupported
 		}

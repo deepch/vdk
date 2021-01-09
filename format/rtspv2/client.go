@@ -75,7 +75,8 @@ type RTSPClient struct {
 	sps                 []byte
 	pps                 []byte
 	CodecData           []av.CodecData
-	PCMTime             int64
+	PCMTime             time.Duration
+	AudioTimeScale      int64
 }
 
 type RTSPClientOptions struct {
@@ -94,11 +95,12 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		OutgoingProxyQueue:  make(chan *[]byte, 3000),
 		OutgoingPacketQueue: make(chan *av.Packet, 3000),
 		BufferRtpPacket:     bytes.NewBuffer([]byte{}),
-		videoID:             0,
-		audioID:             2,
-		videoIDX:            0,
-		audioIDX:            1,
+		videoID:             -1,
+		audioID:             -2,
+		videoIDX:            -1,
+		audioIDX:            -2,
 		options:             options,
+		AudioTimeScale:      8000,
 	}
 	client.headers["User-Agent"] = "Lavf58.20.100"
 	err := client.parseURL(html.UnescapeString(client.options.URL))
@@ -154,10 +156,21 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 				if err == nil {
 					client.Println("Audio AAC bad config")
 				}
+			case av.OPUS:
+				var cl av.ChannelLayout
+				switch i2.ChannelCount {
+				case 1:
+					cl = av.CH_MONO
+				case 2:
+					cl = av.CH_STEREO
+				default:
+					cl = av.CH_MONO
+				}
+				CodecData = codec.NewOpusCodecData(i2.TimeScale, cl)
 			case av.PCM_MULAW:
 				CodecData = codec.NewPCMMulawCodecData()
 			case av.PCM_ALAW:
-				CodecData = codec.NewPCMMulawCodecData()
+				CodecData = codec.NewPCMAlawCodecData()
 			case av.PCM:
 				CodecData = codec.NewPCMCodecData()
 			default:
@@ -166,6 +179,9 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 			if CodecData != nil {
 				client.CodecData = append(client.CodecData, CodecData)
 				client.audioIDX = int8(len(client.CodecData) - 1)
+				if i2.TimeScale != 0 {
+					client.AudioTimeScale = int64(i2.TimeScale)
+				}
 			}
 		}
 		ch += 2
@@ -556,14 +572,21 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
-			//client.PCMTime += int64(float32(1000) / (float32(8000) / float32(len(nal))))
+			//basic
+			//time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond
+			//pcm
+			//client.PCMTime += time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
+			//opus
+			//client.PCMTime := time.Duration((sampleCount/48000)*1000) * time.Millisecond
+			//Need Add Opus And AAC
 			retmap = append(retmap, &av.Packet{
 				Data:            append(binSize(len(nal)), nal...),
 				CompositionTime: time.Duration(1) * time.Millisecond,
 				Idx:             client.audioIDX,
 				IsKeyFrame:      false,
-				Time:            time.Duration(timestamp/8) * time.Millisecond,
+				Time:            time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond,
 			})
+			//log.Println("===>", time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000)))*time.Millisecond)
 		}
 		if len(retmap) > 0 {
 			return retmap, true

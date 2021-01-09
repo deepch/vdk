@@ -123,6 +123,7 @@ var (
 	SPEEX      = MakeAudioCodecType(avCodecTypeMagic + 4)
 	NELLYMOSER = MakeAudioCodecType(avCodecTypeMagic + 5)
 	PCM        = MakeAudioCodecType(avCodecTypeMagic + 6)
+	OPUS       = MakeAudioCodecType(avCodecTypeMagic + 7)
 )
 
 const codecTypeAudioBit = 0x1
@@ -144,6 +145,8 @@ func (self CodecType) String() string {
 		return "NELLYMOSER"
 	case PCM:
 		return "PCM"
+	case OPUS:
+		return "OPUS"
 	}
 	return ""
 }

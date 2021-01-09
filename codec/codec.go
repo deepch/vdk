@@ -7,6 +7,32 @@ import (
 	"github.com/deepch/vdk/codec/fake"
 )
 
+type OpusCodecData struct {
+	typ            av.CodecType
+	SampleRate_    int
+	ChannelLayout_ av.ChannelLayout
+}
+
+func (self OpusCodecData) Type() av.CodecType {
+	return self.typ
+}
+
+func (self OpusCodecData) SampleRate() int {
+	return self.SampleRate_
+}
+
+func (self OpusCodecData) ChannelLayout() av.ChannelLayout {
+	return self.ChannelLayout_
+}
+
+func (self OpusCodecData) PacketDuration(data []byte) (time.Duration, error) {
+	return time.Duration(1000) * time.Second / time.Duration(self.SampleRate_), nil
+}
+
+func (self OpusCodecData) SampleFormat() av.SampleFormat {
+	return av.FLT
+}
+
 type PCMUCodecData struct {
 	typ av.CodecType
 }
@@ -48,15 +74,19 @@ func NewPCMAlawCodecData() av.AudioCodecData {
 		typ: av.PCM_ALAW,
 	}
 }
+func NewOpusCodecData(sr int, cc av.ChannelLayout) av.AudioCodecData {
+	return OpusCodecData{
+		typ:            av.OPUS,
+		SampleRate_:    sr,
+		ChannelLayout_: cc,
+	}
+}
 
 type SpeexCodecData struct {
 	fake.CodecData
 }
 
 func (self SpeexCodecData) PacketDuration(data []byte) (time.Duration, error) {
-	// libavcodec/libspeexdec.c
-	// samples = samplerate/50
-	// duration = 0.02s
 	return time.Millisecond * 20, nil
 }
 
