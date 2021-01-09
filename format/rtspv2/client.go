@@ -75,8 +75,9 @@ type RTSPClient struct {
 	sps                 []byte
 	pps                 []byte
 	CodecData           []av.CodecData
-	PCMTime             time.Duration
+	AudioTimeLine       time.Duration
 	AudioTimeScale      int64
+	audioCodec          string
 }
 
 type RTSPClientOptions struct {
@@ -179,6 +180,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 			if CodecData != nil {
 				client.CodecData = append(client.CodecData, CodecData)
 				client.audioIDX = int8(len(client.CodecData) - 1)
+				client.audioCodec = CodecData.Type().String()
 				if i2.TimeScale != 0 {
 					client.AudioTimeScale = int64(i2.TimeScale)
 				}
@@ -572,21 +574,20 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
-			//basic
-			//time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond
-			//pcm
-			//client.PCMTime += time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-			//opus
-			//client.PCMTime := time.Duration((sampleCount/48000)*1000) * time.Millisecond
-			//Need Add Opus And AAC
+			if client.audioCodec == av.PCM_MULAW.String() || client.audioCodec == av.PCM_ALAW.String() || client.audioCodec == av.PCM.String() {
+				client.AudioTimeLine += time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
+			} else if client.audioCodec == av.OPUS.String() {
+				client.AudioTimeLine += time.Duration(20) * time.Millisecond
+			} else {
+				client.AudioTimeLine = time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond
+			}
 			retmap = append(retmap, &av.Packet{
 				Data:            append(binSize(len(nal)), nal...),
 				CompositionTime: time.Duration(1) * time.Millisecond,
 				Idx:             client.audioIDX,
 				IsKeyFrame:      false,
-				Time:            time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000))) * time.Millisecond,
+				Time:            client.AudioTimeLine,
 			})
-			//log.Println("===>", time.Duration(float32(timestamp)/float32(float32(client.AudioTimeScale)/float32(1000)))*time.Millisecond)
 		}
 		if len(retmap) > 0 {
 			return retmap, true

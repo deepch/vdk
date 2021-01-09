@@ -159,6 +159,11 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 	if element.stop {
 		return ErrorClientOffline
 	}
+	//Wait client ICEConnectionStateConnected
+	if element.status == webrtc.ICEConnectionStateChecking {
+		WritePacketSuccess = true
+		return nil
+	}
 	if element.status != webrtc.ICEConnectionStateConnected {
 		return nil
 	}
@@ -176,8 +181,11 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 				pkt.Data = pkt.Data[4:]
 			}
 		case av.PCM_MULAW:
+			pkt.Data = pkt.Data[4:]
 		case av.PCM_ALAW:
+			pkt.Data = pkt.Data[4:]
 		case av.OPUS:
+			pkt.Data = pkt.Data[4:]
 		default:
 			return ErrorCodecNotSupported
 		}
