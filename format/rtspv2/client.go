@@ -590,32 +590,63 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			case av.PCM_MULAW:
 				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
 				client.AudioTimeLine += duration
+				retmap = append(retmap, &av.Packet{
+					Data:            append(binSize(len(nal)), nal...),
+					CompositionTime: time.Duration(1) * time.Millisecond,
+					Duration:        duration,
+					Idx:             client.audioIDX,
+					IsKeyFrame:      false,
+					Time:            client.AudioTimeLine,
+				})
 			case av.PCM_ALAW:
 				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
 				client.AudioTimeLine += duration
+				retmap = append(retmap, &av.Packet{
+					Data:            append(binSize(len(nal)), nal...),
+					CompositionTime: time.Duration(1) * time.Millisecond,
+					Duration:        duration,
+					Idx:             client.audioIDX,
+					IsKeyFrame:      false,
+					Time:            client.AudioTimeLine,
+				})
 			case av.OPUS:
 				duration = time.Duration(20) * time.Millisecond
 				client.AudioTimeLine += duration
+				retmap = append(retmap, &av.Packet{
+					Data:            append(binSize(len(nal)), nal...),
+					CompositionTime: time.Duration(1) * time.Millisecond,
+					Duration:        duration,
+					Idx:             client.audioIDX,
+					IsKeyFrame:      false,
+					Time:            client.AudioTimeLine,
+				})
 			case av.AAC:
-				if nal[1] == 32 {
-					return nil, false
+				auHeadersLength := uint16(0) | (uint16(nal[0]) << 8) | uint16(nal[1])
+				auHeadersCount := auHeadersLength >> 4
+				framesPayloadOffset := 2 + int(auHeadersCount)<<1
+				auHeaders := nal[2:framesPayloadOffset]
+				framesPayload := nal[framesPayloadOffset:]
+				for i := 0; i < int(auHeadersCount); i++ {
+					auHeader := uint16(0) | (uint16(auHeaders[0]) << 8) | uint16(auHeaders[1])
+					frameSize := auHeader >> 3
+					frame := framesPayload[:frameSize]
+					auHeaders = auHeaders[2:]
+					framesPayload = framesPayload[frameSize:]
+					if _, _, _, _, err := aacparser.ParseADTSHeader(frame); err == nil {
+						frame = frame[7:]
+					}
+					duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000) * time.Millisecond
+					client.AudioTimeLine += duration
+					retmap = append(retmap, &av.Packet{
+						Data:            append(binSize(len(frame)), frame...),
+						CompositionTime: time.Duration(1) * time.Millisecond,
+						Duration:        duration,
+						Idx:             client.audioIDX,
+						IsKeyFrame:      false,
+						Time:            client.AudioTimeLine,
+					})
 				}
-				nal = nal[4:]
-				if _, _, _, _, err := aacparser.ParseADTSHeader(nal); err == nil {
-					nal = nal[7:]
-				}
-				duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000) * time.Millisecond
-				client.AudioTimeLine += duration
 			}
-
-			retmap = append(retmap, &av.Packet{
-				Data:            append(binSize(len(nal)), nal...),
-				CompositionTime: time.Duration(1) * time.Millisecond,
-				Duration:        duration,
-				Idx:             client.audioIDX,
-				IsKeyFrame:      false,
-				Time:            client.AudioTimeLine,
-			})
 		}
 		if len(retmap) > 0 {
 			client.PreAudioTS = timestamp
