@@ -272,9 +272,6 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 	if stream.lastpkt != nil {
 		ts = pkt.Time - stream.lastpkt.Time
 	}
-	if stream.CodecData.Type().IsAudio() {
-		pkt.Data = pkt.Data[4:]
-	}
 	got, buf, err := stream.writePacketV2(pkt, ts, 5)
 	stream.lastpkt = &pkt
 	if err != nil {

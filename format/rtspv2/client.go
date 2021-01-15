@@ -522,7 +522,6 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			client.BufferRtpPacket.Truncate(0)
 			client.BufferRtpPacket.Reset()
 		}
-
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
@@ -559,6 +558,22 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 					if isEnd {
 						client.fuStarted = false
 						naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
+						if naluTypef == 7 {
+							bufered, _ := h264parser.SplitNALUs(append([]byte{0, 0, 0, 1}, client.BufferRtpPacket.Bytes()...))
+							for _, v := range bufered {
+								naluTypefs := v[0] & 0x1f
+								switch {
+								case naluTypefs == 5:
+									client.BufferRtpPacket.Reset()
+									client.BufferRtpPacket.Write(v)
+									naluTypef = 5
+								case naluTypefs == 7:
+									client.CodecUpdateSPS(v)
+								case naluTypefs == 8:
+									client.CodecUpdatePPS(v)
+								}
+							}
+						}
 						retmap = append(retmap, &av.Packet{
 							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
 							CompositionTime: time.Duration(1) * time.Millisecond,
@@ -591,7 +606,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
 				client.AudioTimeLine += duration
 				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(len(nal)), nal...),
+					Data:            nal,
 					CompositionTime: time.Duration(1) * time.Millisecond,
 					Duration:        duration,
 					Idx:             client.audioIDX,
@@ -602,7 +617,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
 				client.AudioTimeLine += duration
 				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(len(nal)), nal...),
+					Data:            nal,
 					CompositionTime: time.Duration(1) * time.Millisecond,
 					Duration:        duration,
 					Idx:             client.audioIDX,
@@ -613,7 +628,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				duration = time.Duration(20) * time.Millisecond
 				client.AudioTimeLine += duration
 				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(len(nal)), nal...),
+					Data:            nal,
 					CompositionTime: time.Duration(1) * time.Millisecond,
 					Duration:        duration,
 					Idx:             client.audioIDX,
@@ -638,7 +653,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 					duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000) * time.Millisecond
 					client.AudioTimeLine += duration
 					retmap = append(retmap, &av.Packet{
-						Data:            append(binSize(len(frame)), frame...),
+						Data:            frame,
 						CompositionTime: time.Duration(1) * time.Millisecond,
 						Duration:        duration,
 						Idx:             client.audioIDX,

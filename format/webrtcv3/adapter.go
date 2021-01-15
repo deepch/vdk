@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v3"
 
 	"github.com/deepch/vdk/av"
@@ -29,19 +30,44 @@ type Muxer struct {
 	pc        *webrtc.PeerConnection
 	ClientACK *time.Timer
 	StreamACK *time.Timer
+	Options   Options
 }
 type Stream struct {
 	codec av.CodecData
-	ts    time.Duration
 	track *webrtc.TrackLocalStaticSample
 }
+type Options struct {
+	ICEServers []string
+	PortMin    uint16
+	PortMax    uint16
+}
 
-func NewMuxer() *Muxer {
-	tmp := Muxer{ClientACK: time.NewTimer(time.Second * 20), StreamACK: time.NewTimer(time.Second * 20), streams: make(map[int8]*Stream)}
+func NewMuxer(options Options) *Muxer {
+	tmp := Muxer{Options: options, ClientACK: time.NewTimer(time.Second * 20), StreamACK: time.NewTimer(time.Second * 20), streams: make(map[int8]*Stream)}
 	go tmp.WaitCloser()
 	return &tmp
 }
-
+func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*webrtc.PeerConnection, error) {
+	if len(element.Options.ICEServers) > 0 {
+		log.Println("Set ICEServers", element.Options.ICEServers)
+		configuration.ICEServers = append(configuration.ICEServers, webrtc.ICEServer{URLs: element.Options.ICEServers})
+	}
+	m := &webrtc.MediaEngine{}
+	if err := m.RegisterDefaultCodecs(); err != nil {
+		return nil, err
+	}
+	i := &interceptor.Registry{}
+	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+		return nil, err
+	}
+	s := webrtc.SettingEngine{}
+	if element.Options.PortMin > 0 && element.Options.PortMax > 0 && element.Options.PortMax > element.Options.PortMin {
+		s.SetEphemeralUDPPortRange(element.Options.PortMin, element.Options.PortMax)
+		log.Println("Set UDP ports to", element.Options.PortMin, "..", element.Options.PortMax)
+	}
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i), webrtc.WithSettingEngine(s))
+	return api.NewPeerConnection(configuration)
+}
 func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string, error) {
 	var WriteHeaderSuccess bool
 	if len(streams) == 0 {
@@ -55,7 +81,7 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 		Type: webrtc.SDPTypeOffer,
 		SDP:  string(sdpB),
 	}
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	peerConnection, err := element.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return "", err
 	}
@@ -169,9 +195,6 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 	}
 	if tmp, ok := element.streams[pkt.Idx]; ok {
 		element.StreamACK.Reset(10 * time.Second)
-		if tmp.ts == 0 {
-			tmp.ts = pkt.Time
-		}
 		switch tmp.codec.Type() {
 		case av.H264:
 			codec := tmp.codec.(h264parser.CodecData)
@@ -180,18 +203,20 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 			} else {
 				pkt.Data = pkt.Data[4:]
 			}
-		case av.PCM_MULAW:
-			pkt.Data = pkt.Data[4:]
 		case av.PCM_ALAW:
-			pkt.Data = pkt.Data[4:]
 		case av.OPUS:
-			pkt.Data = pkt.Data[4:]
+		case av.PCM_ALAW:
+		case av.AAC:
+			//TODO: NEED ADD DECODER AND ENCODER
+			return ErrorCodecNotSupported
+		case av.PCM:
+			//TODO: NEED ADD ENCODER
+			return ErrorCodecNotSupported
 		default:
 			return ErrorCodecNotSupported
 		}
-		err = tmp.track.WriteSample(media.Sample{Data: pkt.Data, Duration: pkt.Time - element.streams[pkt.Idx].ts})
+		err = tmp.track.WriteSample(media.Sample{Data: pkt.Data, Duration: pkt.Duration})
 		if err == nil {
-			element.streams[pkt.Idx].ts = pkt.Time
 			WritePacketSuccess = true
 		}
 		return err
