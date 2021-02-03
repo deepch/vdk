@@ -9,6 +9,7 @@ import (
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/codec/h265parser"
 	"github.com/deepch/vdk/format/mp4/mp4io"
 	"github.com/deepch/vdk/format/mp4f/mp4fio"
 	"github.com/deepch/vdk/utils/bits/pio"
@@ -178,7 +179,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 		}
 		self.codecString = fmt.Sprintf("avc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
 	} else if self.Type() == av.H265 {
-		codec := self.CodecData.(h264parser.CodecData)
+		codec := self.CodecData.(h265parser.CodecData)
 		width, height := codec.Width(), codec.Height()
 		self.sample.SampleDesc.HV1Desc = &mp4io.HV1Desc{
 			DataRefIdx:           1,

@@ -21,6 +21,7 @@ import (
 	"github.com/deepch/vdk/codec"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/codec/h265parser"
 	"github.com/deepch/vdk/format/rtsp/sdp"
 )
 
@@ -72,12 +73,14 @@ type RTSPClient struct {
 	fuStarted           bool
 	options             RTSPClientOptions
 	BufferRtpPacket     *bytes.Buffer
+	vps                 []byte
 	sps                 []byte
 	pps                 []byte
 	CodecData           []av.CodecData
 	AudioTimeLine       time.Duration
 	AudioTimeScale      int64
 	audioCodec          av.CodecType
+	videoCodec          av.CodecType
 	PreAudioTS          int64
 	PreVideoTS          int64
 	PreSequenceNumber   int
@@ -145,6 +148,16 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 					client.pps = i2.SpropParameterSets[1]
 					client.CodecData = append(client.CodecData, codecData)
 					client.videoIDX = int8(len(client.CodecData) - 1)
+					client.videoCodec = av.H264
+				}
+			} else if i2.Type == av.H265 && len(i2.SpropVPS) > 1 && len(i2.SpropSPS) > 1 && len(i2.SpropPPS) > 1 {
+				if codecData, err := h265parser.NewCodecDataFromVPSAndSPSAndPPS(i2.SpropVPS, i2.SpropSPS, i2.SpropPPS); err == nil {
+					client.vps = i2.SpropVPS
+					client.sps = i2.SpropSPS
+					client.pps = i2.SpropPPS
+					client.CodecData = append(client.CodecData, codecData)
+					client.videoIDX = int8(len(client.CodecData) - 1)
+					client.videoCodec = av.H265
 				}
 			} else {
 				client.Println("SDP Video Codec Type Not Supported", i2.Type)
@@ -531,70 +544,119 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
-			naluType := nal[0] & 0x1f
-			switch {
-			case naluType >= 1 && naluType <= 5:
-				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(len(nal)), nal...),
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Idx:             client.videoIDX,
-					IsKeyFrame:      naluType == 5,
-					Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-					Time:            time.Duration(timestamp/90) * time.Millisecond,
-				})
-			case naluType == 7:
-				client.CodecUpdateSPS(nal)
-			case naluType == 8:
-				client.CodecUpdatePPS(nal)
-			case naluType == 24:
-				client.Println("24 Type need add next version report https://github.com/deepch/vdk")
-			case naluType == 28:
-				fuIndicator := content[offset]
-				fuHeader := content[offset+1]
-				isStart := fuHeader&0x80 != 0
-				isEnd := fuHeader&0x40 != 0
-				if isStart {
-					client.fuStarted = true
-					client.BufferRtpPacket.Truncate(0)
-					client.BufferRtpPacket.Reset()
-					client.BufferRtpPacket.Write([]byte{fuIndicator&0xe0 | fuHeader&0x1f})
-				}
-				if client.fuStarted {
-					client.BufferRtpPacket.Write(content[offset+2 : end])
-					if isEnd {
-						client.fuStarted = false
-						naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
-						if naluTypef == 7 {
-							bufered, _ := h264parser.SplitNALUs(append([]byte{0, 0, 0, 1}, client.BufferRtpPacket.Bytes()...))
-							for _, v := range bufered {
-								naluTypefs := v[0] & 0x1f
-								switch {
-								case naluTypefs == 5:
-									client.BufferRtpPacket.Reset()
-									client.BufferRtpPacket.Write(v)
-									naluTypef = 5
-								case naluTypefs == 7:
-									client.CodecUpdateSPS(v)
-								case naluTypefs == 8:
-									client.CodecUpdatePPS(v)
-								}
-							}
-						}
+			if client.videoCodec == av.H265 {
+				naluType := (nal[0] >> 1) & 0x3f
+				switch naluType {
+				case h265parser.NAL_UNIT_CODED_SLICE_TRAIL_R:
+					retmap = append(retmap, &av.Packet{
+						Data:            append(binSize(len(nal)), nal...),
+						CompositionTime: time.Duration(1) * time.Millisecond,
+						Idx:             client.videoIDX,
+						IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
+						Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
+						Time:            time.Duration(timestamp/90) * time.Millisecond,
+					})
+				case h265parser.NAL_UNIT_VPS:
+					client.CodecUpdateVPS(nal)
+				case h265parser.NAL_UNIT_SPS:
+					client.CodecUpdateSPS(nal)
+				case h265parser.NAL_UNIT_PPS:
+					client.CodecUpdatePPS(nal)
+				case h265parser.NAL_UNIT_UNSPECIFIED_49:
+					se := nal[2] >> 6
+					naluType = nal[2] & 0x3f
+					if se == 2 {
+						client.BufferRtpPacket.Truncate(0)
+						client.BufferRtpPacket.Reset()
+						client.BufferRtpPacket.Write([]byte{0, 0, 0, 0, (nal[0] & 0x81) | (naluType << 1), nal[1]})
+						r := make([]byte, 2)
+						r[1] = nal[1]
+						r[0] = (nal[0] & 0x81) | (naluType << 1)
+						client.BufferRtpPacket.Write(nal[3:])
+					} else if se == 1 {
+						client.BufferRtpPacket.Write(nal[3:])
+						binary.BigEndian.PutUint32(client.BufferRtpPacket.Bytes()[:4], uint32(client.BufferRtpPacket.Len())-4)
+						buf := make([]byte, client.BufferRtpPacket.Len())
+						copy(buf, client.BufferRtpPacket.Bytes())
 						retmap = append(retmap, &av.Packet{
-							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
+							Data:            append(binSize(len(nal)), nal...),
 							CompositionTime: time.Duration(1) * time.Millisecond,
-							Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 							Idx:             client.videoIDX,
-							IsKeyFrame:      naluTypef == 5,
+							IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
+							Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 							Time:            time.Duration(timestamp/90) * time.Millisecond,
 						})
+					} else {
+						client.BufferRtpPacket.Write(nal[3:])
 					}
+				default:
+					//log.Println("???", naluType)
 				}
-			default:
-				client.Println("Unsupported NAL Type", naluType)
+			} else if client.videoCodec == av.H264 {
+				naluType := nal[0] & 0x1f
+				switch {
+				case naluType >= 1 && naluType <= 5:
+					retmap = append(retmap, &av.Packet{
+						Data:            append(binSize(len(nal)), nal...),
+						CompositionTime: time.Duration(1) * time.Millisecond,
+						Idx:             client.videoIDX,
+						IsKeyFrame:      naluType == 5,
+						Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
+						Time:            time.Duration(timestamp/90) * time.Millisecond,
+					})
+				case naluType == 7:
+					client.CodecUpdateSPS(nal)
+				case naluType == 8:
+					client.CodecUpdatePPS(nal)
+				case naluType == 24:
+					client.Println("24 Type need add next version report https://github.com/deepch/vdk")
+				case naluType == 28:
+					fuIndicator := content[offset]
+					fuHeader := content[offset+1]
+					isStart := fuHeader&0x80 != 0
+					isEnd := fuHeader&0x40 != 0
+					if isStart {
+						client.fuStarted = true
+						client.BufferRtpPacket.Truncate(0)
+						client.BufferRtpPacket.Reset()
+						client.BufferRtpPacket.Write([]byte{fuIndicator&0xe0 | fuHeader&0x1f})
+					}
+					if client.fuStarted {
+						client.BufferRtpPacket.Write(content[offset+2 : end])
+						if isEnd {
+							client.fuStarted = false
+							naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
+							if naluTypef == 7 {
+								bufered, _ := h264parser.SplitNALUs(append([]byte{0, 0, 0, 1}, client.BufferRtpPacket.Bytes()...))
+								for _, v := range bufered {
+									naluTypefs := v[0] & 0x1f
+									switch {
+									case naluTypefs == 5:
+										client.BufferRtpPacket.Reset()
+										client.BufferRtpPacket.Write(v)
+										naluTypef = 5
+									case naluTypefs == 7:
+										client.CodecUpdateSPS(v)
+									case naluTypefs == 8:
+										client.CodecUpdatePPS(v)
+									}
+								}
+							}
+							retmap = append(retmap, &av.Packet{
+								Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
+								CompositionTime: time.Duration(1) * time.Millisecond,
+								Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
+								Idx:             client.videoIDX,
+								IsKeyFrame:      naluTypef == 5,
+								Time:            time.Duration(timestamp/90) * time.Millisecond,
+							})
+						}
+					}
+				default:
+					client.Println("Unsupported NAL Type", naluType)
+				}
 			}
 		}
-
 		if len(retmap) > 0 {
 			client.PreVideoTS = timestamp
 			return retmap, true
@@ -680,49 +742,109 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 }
 
 func (client *RTSPClient) CodecUpdateSPS(val []byte) {
-	if bytes.Compare(val, client.sps) != 0 {
-		if len(client.sps) > 0 && len(client.pps) > 0 {
-			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(val, client.pps)
-			if err != nil {
-				client.Println("Parse Codec Data Error", err)
-				return
-			}
-			if len(client.CodecData) > 0 {
-				for i, i2 := range client.CodecData {
-					if i2.Type().IsVideo() {
-						client.CodecData[i] = codecData
-					}
-				}
-			} else {
-				client.CodecData = append(client.CodecData, codecData)
+	if client.videoCodec != av.H264 && client.videoCodec != av.H265 {
+		return
+	}
+	if bytes.Compare(val, client.sps) == 0 {
+		return
+	}
+	client.sps = val
+	if (client.videoCodec == av.H264 && len(client.pps) == 0) || (client.videoCodec == av.H265 && (len(client.vps) == 0 || len(client.pps) == 0)) {
+		return
+	}
+	var codecData av.VideoCodecData
+	var err error
+	switch client.videoCodec {
+	case av.H264:
+		codecData, err = h264parser.NewCodecDataFromSPSAndPPS(val, client.pps)
+		if err != nil {
+			client.Println("Parse Codec Data Error", err)
+			return
+		}
+	case av.H265:
+		codecData, err = h265parser.NewCodecDataFromVPSAndSPSAndPPS(client.vps, val, client.pps)
+		if err != nil {
+			client.Println("Parse Codec Data Error", err)
+			return
+		}
+	}
+	if len(client.CodecData) > 0 {
+		for i, i2 := range client.CodecData {
+			if i2.Type().IsVideo() {
+				client.CodecData[i] = codecData
 			}
 		}
-		client.Signals <- SignalCodecUpdate
-		client.sps = val
+	} else {
+		client.CodecData = append(client.CodecData, codecData)
 	}
+	client.Signals <- SignalCodecUpdate
 }
 
 func (client *RTSPClient) CodecUpdatePPS(val []byte) {
-	if bytes.Compare(val, client.pps) != 0 {
-		if len(client.sps) > 0 && len(client.pps) > 0 {
-			codecData, err := h264parser.NewCodecDataFromSPSAndPPS(client.sps, val)
-			if err != nil {
-				client.Println("Parse Codec Data Error", err)
-				return
-			}
-			if len(client.CodecData) > 0 {
-				for i, i2 := range client.CodecData {
-					if i2.Type().IsVideo() {
-						client.CodecData[i] = codecData
-					}
-				}
-			} else {
-				client.CodecData = append(client.CodecData, codecData)
+	if client.videoCodec != av.H264 && client.videoCodec != av.H265 {
+		return
+	}
+	if bytes.Compare(val, client.pps) == 0 {
+		return
+	}
+	client.pps = val
+	if (client.videoCodec == av.H264 && len(client.sps) == 0) || (client.videoCodec == av.H265 && (len(client.vps) == 0 || len(client.sps) == 0)) {
+		return
+	}
+	var codecData av.VideoCodecData
+	var err error
+	switch client.videoCodec {
+	case av.H264:
+		codecData, err = h264parser.NewCodecDataFromSPSAndPPS(client.sps, val)
+		if err != nil {
+			client.Println("Parse Codec Data Error", err)
+			return
+		}
+	case av.H265:
+		codecData, err = h265parser.NewCodecDataFromVPSAndSPSAndPPS(client.vps, client.sps, val)
+		if err != nil {
+			client.Println("Parse Codec Data Error", err)
+			return
+		}
+	}
+	if len(client.CodecData) > 0 {
+		for i, i2 := range client.CodecData {
+			if i2.Type().IsVideo() {
+				client.CodecData[i] = codecData
 			}
 		}
-		client.Signals <- SignalCodecUpdate
-		client.pps = val
+	} else {
+		client.CodecData = append(client.CodecData, codecData)
 	}
+	client.Signals <- SignalCodecUpdate
+}
+
+func (client *RTSPClient) CodecUpdateVPS(val []byte) {
+	if client.videoCodec != av.H265 {
+		return
+	}
+	if bytes.Compare(val, client.vps) == 0 {
+		return
+	}
+	client.vps = val
+	if len(client.sps) == 0 || len(client.pps) == 0 {
+		return
+	}
+	codecData, err := h265parser.NewCodecDataFromVPSAndSPSAndPPS(val, client.sps, client.pps)
+	if err != nil {
+		client.Println("Parse Codec Data Error", err)
+		return
+	}
+	if len(client.CodecData) > 0 {
+		for i, i2 := range client.CodecData {
+			if i2.Type().IsVideo() {
+				client.CodecData[i] = codecData
+			}
+		}
+	} else {
+		client.CodecData = append(client.CodecData, codecData)
+	}
+	client.Signals <- SignalCodecUpdate
 }
 
 //Println mini logging functions

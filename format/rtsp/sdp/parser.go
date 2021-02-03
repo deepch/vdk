@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -23,6 +24,9 @@ type Media struct {
 	ChannelCount       int
 	Config             []byte
 	SpropParameterSets [][]byte
+	SpropVPS           []byte
+	SpropSPS           []byte
+	SpropPPS           []byte
 	PayloadType        int
 	SizeLength         int
 	IndexLength        int
@@ -93,6 +97,10 @@ func Parse(content string) (sess Session, medias []Media) {
 								}
 							case "H264":
 								media.Type = av.H264
+							case "H265":
+								media.Type = av.H265
+							case "HEVC":
+								media.Type = av.H265
 							}
 							if i, err := strconv.Atoi(keyval[1]); err == nil {
 								media.TimeScale = i
@@ -115,6 +123,27 @@ func Parse(content string) (sess Session, medias []Media) {
 										media.SizeLength, _ = strconv.Atoi(val)
 									case "indexlength":
 										media.IndexLength, _ = strconv.Atoi(val)
+									case "sprop-vps":
+										val, err := base64.StdEncoding.DecodeString(val)
+										if err == nil {
+											media.SpropVPS = val
+										} else {
+											log.Println("SDP: decode vps error", err)
+										}
+									case "sprop-sps":
+										val, err := base64.StdEncoding.DecodeString(val)
+										if err == nil {
+											media.SpropSPS = val
+										} else {
+											log.Println("SDP: decode sps error", err)
+										}
+									case "sprop-pps":
+										val, err := base64.StdEncoding.DecodeString(val)
+										if err == nil {
+											media.SpropPPS = val
+										} else {
+											log.Println("SDP: decode pps error", err)
+										}
 									case "sprop-parameter-sets":
 										fields := strings.Split(val, ",")
 										for _, field := range fields {

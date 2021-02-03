@@ -441,7 +441,7 @@ func NewCodecDataFromAVCDecoderConfRecord(record []byte) (self CodecData, err er
 	return
 }
 
-func NewCodecDataFromSPSAndPPS(sps, pps, vps []byte) (self CodecData, err error) {
+func NewCodecDataFromVPSAndSPSAndPPS(vps, sps, pps []byte) (self CodecData, err error) {
 	recordinfo := AVCDecoderConfRecord{}
 	recordinfo.AVCProfileIndication = sps[1]
 	recordinfo.ProfileCompatibility = sps[2]
@@ -468,9 +468,9 @@ type AVCDecoderConfRecord struct {
 	ProfileCompatibility uint8
 	AVCLevelIndication   uint8
 	LengthSizeMinusOne   uint8
+	VPS                  [][]byte
 	SPS                  [][]byte
 	PPS                  [][]byte
-	VPS                  [][]byte
 }
 
 var ErrDecconfInvalid = fmt.Errorf("h265parser: AVCDecoderConfRecord invalid")
