@@ -34,7 +34,7 @@ func (self *Muxer) SetMaxFrames(count int) {
 }
 func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	switch codec.Type() {
-	case av.H264, av.AAC:
+	case av.H264, av.H265, av.AAC:
 	default:
 		err = fmt.Errorf("fmp4: codec type=%v is not supported", codec.Type())
 		return
@@ -76,6 +76,9 @@ func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	}
 	switch codec.Type() {
 	case av.H264:
+		stream.sample.SyncSample = &mp4io.SyncSample{}
+		stream.timeScale = 90000
+	case av.H265:
 		stream.sample.SyncSample = &mp4io.SyncSample{}
 		stream.timeScale = 90000
 	case av.AAC:
@@ -174,6 +177,28 @@ func (self *Stream) fillTrackAtom() (err error) {
 			Flags: 0x000001,
 		}
 		self.codecString = fmt.Sprintf("avc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
+	} else if self.Type() == av.H265 {
+		codec := self.CodecData.(h264parser.CodecData)
+		width, height := codec.Width(), codec.Height()
+		self.sample.SampleDesc.HV1Desc = &mp4io.HV1Desc{
+			DataRefIdx:           1,
+			HorizontalResolution: 72,
+			VorizontalResolution: 72,
+			Width:                int16(width),
+			Height:               int16(height),
+			FrameCount:           1,
+			Depth:                24,
+			ColorTableId:         -1,
+			Conf:                 &mp4io.HV1Conf{Data: codec.AVCDecoderConfRecordBytes()},
+		}
+		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
+			SubType: [4]byte{'v', 'i', 'd', 'e'},
+			Name:    []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'G', 'G', 0, 0, 0},
+		}
+		self.trackAtom.Media.Info.Video = &mp4io.VideoMediaInfo{
+			Flags: 0x000001,
+		}
+		self.codecString = fmt.Sprintf("hvc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
 	} else if self.Type() == av.AAC {
 		codec := self.CodecData.(aacparser.CodecData)
 		self.sample.SampleDesc.MP4ADesc = &mp4io.MP4ADesc{
@@ -183,8 +208,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 			SampleRate:       float64(codec.SampleRate()),
 			Unknowns:         []mp4io.Atom{self.buildEsds(codec.MPEG4AudioConfigBytes())},
 		}
-		//log.Fatalln(codec.MPEG4AudioConfigBytes())
-		//log.Fatalln(codec.SampleFormat().BytesPerSample())
+
 		self.trackAtom.Header.Volume = 1
 		self.trackAtom.Header.AlternateGroup = 1
 		self.trackAtom.Header.Duration = 0

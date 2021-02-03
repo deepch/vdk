@@ -29,7 +29,7 @@ func NewMuxer(w io.WriteSeeker) *Muxer {
 
 func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	switch codec.Type() {
-	case av.H264, av.AAC:
+	case av.H264, av.H265, av.AAC:
 
 	default:
 		err = fmt.Errorf("mp4: codec type=%v is not supported", codec.Type())
@@ -82,6 +82,8 @@ func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	switch codec.Type() {
 	case av.H264:
 		stream.sample.SyncSample = &mp4io.SyncSample{}
+	case av.H265:
+		stream.sample.SyncSample = &mp4io.SyncSample{}
 	}
 
 	stream.timeScale = 90000
@@ -94,7 +96,6 @@ func (self *Muxer) newStream(codec av.CodecData) (err error) {
 func (self *Stream) fillTrackAtom() (err error) {
 	self.trackAtom.Media.Header.TimeScale = int32(self.timeScale)
 	self.trackAtom.Media.Header.Duration = int32(self.duration)
-
 	if self.Type() == av.H264 {
 		codec := self.CodecData.(h264parser.CodecData)
 		width, height := codec.Width(), codec.Height()
@@ -118,7 +119,29 @@ func (self *Stream) fillTrackAtom() (err error) {
 		}
 		self.trackAtom.Header.TrackWidth = float64(width)
 		self.trackAtom.Header.TrackHeight = float64(height)
-
+	} else if self.Type() == av.H265 {
+		codec := self.CodecData.(h264parser.CodecData)
+		width, height := codec.Width(), codec.Height()
+		self.sample.SampleDesc.HV1Desc = &mp4io.HV1Desc{
+			DataRefIdx:           1,
+			HorizontalResolution: 72,
+			VorizontalResolution: 72,
+			Width:                int16(width),
+			Height:               int16(height),
+			FrameCount:           1,
+			Depth:                24,
+			ColorTableId:         -1,
+			Conf:                 &mp4io.HV1Conf{Data: codec.AVCDecoderConfRecordBytes()},
+		}
+		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
+			SubType: [4]byte{'v', 'i', 'd', 'e'},
+			Name:    []byte("Video Media Handler"),
+		}
+		self.trackAtom.Media.Info.Video = &mp4io.VideoMediaInfo{
+			Flags: 0x000001,
+		}
+		self.trackAtom.Header.TrackWidth = float64(width)
+		self.trackAtom.Header.TrackHeight = float64(height)
 	} else if self.Type() == av.AAC {
 		codec := self.CodecData.(aacparser.CodecData)
 		self.sample.SampleDesc.MP4ADesc = &mp4io.MP4ADesc{
