@@ -80,6 +80,7 @@ type RTSPClient struct {
 	audioCodec          av.CodecType
 	PreAudioTS          int64
 	PreVideoTS          int64
+	PreSequenceNumber   int
 }
 
 type RTSPClientOptions struct {
@@ -488,6 +489,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	padding := (firstByte>>5)&1 == 1
 	extension := (firstByte>>4)&1 == 1
 	CSRCCnt := int(firstByte & 0x0f)
+	SequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
 	timestamp := int64(binary.BigEndian.Uint32(content[8:12]))
 	offset := RTPHeaderSize
 
@@ -517,6 +519,10 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		if client.PreVideoTS == 0 {
 			client.PreVideoTS = timestamp
 		}
+		if client.PreSequenceNumber != 0 && SequenceNumber-client.PreSequenceNumber != 1 {
+			client.Println("drop packet", SequenceNumber-1)
+		}
+		client.PreSequenceNumber = SequenceNumber
 		if client.BufferRtpPacket.Len() > 4048576 {
 			client.Println("Big Buffer Flush")
 			client.BufferRtpPacket.Truncate(0)

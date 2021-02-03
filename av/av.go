@@ -133,6 +133,8 @@ func (self CodecType) String() string {
 	switch self {
 	case H264:
 		return "H264"
+	case H265:
+		return "H265"
 	case AAC:
 		return "AAC"
 	case PCM_MULAW:
