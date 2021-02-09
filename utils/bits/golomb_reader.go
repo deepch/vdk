@@ -33,6 +33,30 @@ func (self *GolombBitReader) ReadBits(n int) (res uint, err error) {
 	return
 }
 
+func (self *GolombBitReader) ReadBits32(n uint) (r uint32, err error) {
+	var t uint
+	for i := uint(0); i < n; i++ {
+		t, err = self.ReadBit()
+		if err != nil {
+			return
+		}
+		r = (r << 1) | uint32(t)
+	}
+	return
+}
+
+func (self *GolombBitReader) ReadBits64(n uint) (r uint64, err error) {
+	var t uint
+	for i := uint(0); i < n; i++ {
+		t, err = self.ReadBit()
+		if err != nil {
+			return
+		}
+		r = (r << 1) | uint64(t)
+	}
+	return
+}
+
 func (self *GolombBitReader) ReadExponentialGolombCode() (res uint, err error) {
 	i := 0
 	for {

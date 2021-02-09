@@ -142,26 +142,33 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 			return nil, err
 		}
 		if i2.AVType == VIDEO {
-			if i2.Type == av.H264 && len(i2.SpropParameterSets) > 1 {
-				if codecData, err := h264parser.NewCodecDataFromSPSAndPPS(i2.SpropParameterSets[0], i2.SpropParameterSets[1]); err == nil {
-					client.sps = i2.SpropParameterSets[0]
-					client.pps = i2.SpropParameterSets[1]
-					client.CodecData = append(client.CodecData, codecData)
-					client.videoIDX = int8(len(client.CodecData) - 1)
-					client.videoCodec = av.H264
+			if i2.Type == av.H264 {
+				if len(i2.SpropParameterSets) > 1 {
+					if codecData, err := h264parser.NewCodecDataFromSPSAndPPS(i2.SpropParameterSets[0], i2.SpropParameterSets[1]); err == nil {
+						client.sps = i2.SpropParameterSets[0]
+						client.pps = i2.SpropParameterSets[1]
+						client.CodecData = append(client.CodecData, codecData)
+					}
+				} else {
+					client.CodecData = append(client.CodecData, h264parser.CodecData{})
 				}
-			} else if i2.Type == av.H265 && len(i2.SpropVPS) > 1 && len(i2.SpropSPS) > 1 && len(i2.SpropPPS) > 1 {
-				if codecData, err := h265parser.NewCodecDataFromVPSAndSPSAndPPS(i2.SpropVPS, i2.SpropSPS, i2.SpropPPS); err == nil {
-					client.vps = i2.SpropVPS
-					client.sps = i2.SpropSPS
-					client.pps = i2.SpropPPS
-					client.CodecData = append(client.CodecData, codecData)
-					client.videoIDX = int8(len(client.CodecData) - 1)
-					client.videoCodec = av.H265
+				client.videoCodec = av.H264
+			} else if i2.Type == av.H265 {
+				if len(i2.SpropVPS) > 1 && len(i2.SpropSPS) > 1 && len(i2.SpropPPS) > 1 {
+					if codecData, err := h265parser.NewCodecDataFromVPSAndSPSAndPPS(i2.SpropVPS, i2.SpropSPS, i2.SpropPPS); err == nil {
+						client.vps = i2.SpropVPS
+						client.sps = i2.SpropSPS
+						client.pps = i2.SpropPPS
+						client.CodecData = append(client.CodecData, codecData)
+					}
+				} else {
+					client.CodecData = append(client.CodecData, h265parser.CodecData{})
 				}
+				client.videoCodec = av.H265
 			} else {
 				client.Println("SDP Video Codec Type Not Supported", i2.Type)
 			}
+			client.videoIDX = int8(len(client.CodecData) - 1)
 			client.videoID = ch
 		}
 		if i2.AVType == AUDIO {
@@ -552,7 +559,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						Data:            append(binSize(len(nal)), nal...),
 						CompositionTime: time.Duration(1) * time.Millisecond,
 						Idx:             client.videoIDX,
-						IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
+						IsKeyFrame:      false,
 						Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 						Time:            time.Duration(timestamp/90) * time.Millisecond,
 					})
@@ -564,22 +571,19 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 					client.CodecUpdatePPS(nal)
 				case h265parser.NAL_UNIT_UNSPECIFIED_49:
 					se := nal[2] >> 6
-					naluType = nal[2] & 0x3f
+					naluType := nal[2] & 0x3f
 					if se == 2 {
 						client.BufferRtpPacket.Truncate(0)
 						client.BufferRtpPacket.Reset()
-						client.BufferRtpPacket.Write([]byte{0, 0, 0, 0, (nal[0] & 0x81) | (naluType << 1), nal[1]})
+						client.BufferRtpPacket.Write([]byte{(nal[0] & 0x81) | (naluType << 1), nal[1]})
 						r := make([]byte, 2)
 						r[1] = nal[1]
 						r[0] = (nal[0] & 0x81) | (naluType << 1)
 						client.BufferRtpPacket.Write(nal[3:])
 					} else if se == 1 {
 						client.BufferRtpPacket.Write(nal[3:])
-						binary.BigEndian.PutUint32(client.BufferRtpPacket.Bytes()[:4], uint32(client.BufferRtpPacket.Len())-4)
-						buf := make([]byte, client.BufferRtpPacket.Len())
-						copy(buf, client.BufferRtpPacket.Bytes())
 						retmap = append(retmap, &av.Packet{
-							Data:            append(binSize(len(nal)), nal...),
+							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
 							CompositionTime: time.Duration(1) * time.Millisecond,
 							Idx:             client.videoIDX,
 							IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
@@ -590,8 +594,9 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						client.BufferRtpPacket.Write(nal[3:])
 					}
 				default:
-					//log.Println("???", naluType)
+					client.Println("Unsupported Nal", naluType)
 				}
+
 			} else if client.videoCodec == av.H264 {
 				naluType := nal[0] & 0x1f
 				switch {

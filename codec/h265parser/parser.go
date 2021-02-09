@@ -2,12 +2,39 @@ package h265parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/utils/bits"
 	"github.com/deepch/vdk/utils/bits/pio"
 )
+
+type SPSInfo struct {
+	ProfileIdc                       uint
+	LevelIdc                         uint
+	MbWidth                          uint
+	MbHeight                         uint
+	CropLeft                         uint
+	CropRight                        uint
+	CropTop                          uint
+	CropBottom                       uint
+	Width                            uint
+	Height                           uint
+	numTemporalLayers                uint
+	temporalIdNested                 uint
+	chromaFormat                     uint
+	PicWidthInLumaSamples            uint
+	PicHeightInLumaSamples           uint
+	bitDepthLumaMinus8               uint
+	bitDepthChromaMinus8             uint
+	generalProfileSpace              uint
+	generalTierFlag                  uint
+	generalProfileIDC                uint
+	generalProfileCompatibilityFlags uint32
+	generalConstraintIndicatorFlags  uint64
+	generalLevelIDC                  uint
+}
 
 const (
 	NAL_UNIT_CODED_SLICE_TRAIL_N    = 0
@@ -83,6 +110,11 @@ const (
 	MAX_SPS_COUNT  = 32
 )
 
+var (
+	ErrorH265IncorectUnitSize = errors.New("Invorect Unit Size")
+	ErrorH265IncorectUnitType = errors.New("Incorect Unit Type")
+)
+
 func IsDataNALU(b []byte) bool {
 	typ := b[0] & 0x1f
 	return typ >= 1 && typ <= 5
@@ -128,7 +160,6 @@ func SplitNALUs(b []byte) (nalus [][]byte, typ int) {
 			return nalus, NALU_AVCC
 		}
 	}
-	// is Annex B
 	if val3 == 1 || val4 == 1 {
 		_val3 := val3
 		_val4 := val4
@@ -175,212 +206,216 @@ func SplitNALUs(b []byte) (nalus [][]byte, typ int) {
 	return [][]byte{b}, NALU_RAW
 }
 
-type SPSInfo struct {
-	ProfileIdc uint
-	LevelIdc   uint
+func ParseSPS(sps []byte) (ctx SPSInfo, err error) {
+	if len(sps) < 2 {
+		err = ErrorH265IncorectUnitSize
+		return
+	}
+	rbsp := nal2rbsp(sps[2:])
+	br := &bits.GolombBitReader{R: bytes.NewReader(rbsp)}
+	if _, err = br.ReadBits(4); err != nil {
+		return
+	}
+	spsMaxSubLayersMinus1, err := br.ReadBits(3)
+	if err != nil {
+		return
+	}
 
-	MbWidth  uint
-	MbHeight uint
+	if spsMaxSubLayersMinus1+1 > ctx.numTemporalLayers {
+		ctx.numTemporalLayers = spsMaxSubLayersMinus1 + 1
+	}
+	if ctx.temporalIdNested, err = br.ReadBit(); err != nil {
+		return
+	}
+	if err = parsePTL(br, &ctx, spsMaxSubLayersMinus1); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	var cf uint
+	if cf, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	ctx.chromaFormat = uint(cf)
+	if ctx.chromaFormat == 3 {
+		if _, err = br.ReadBit(); err != nil {
+			return
+		}
+	}
+	if ctx.PicWidthInLumaSamples, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	ctx.Width = uint(ctx.PicWidthInLumaSamples)
+	if ctx.PicHeightInLumaSamples, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	ctx.Height = uint(ctx.PicHeightInLumaSamples)
+	conformanceWindowFlag, err := br.ReadBit()
+	if err != nil {
+		return
+	}
+	if conformanceWindowFlag != 0 {
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+	}
 
-	CropLeft   uint
-	CropRight  uint
-	CropTop    uint
-	CropBottom uint
+	var bdlm8 uint
+	if bdlm8, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	ctx.bitDepthChromaMinus8 = uint(bdlm8)
+	var bdcm8 uint
+	if bdcm8, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	ctx.bitDepthChromaMinus8 = uint(bdcm8)
 
-	Width  uint
-	Height uint
+	_, err = br.ReadExponentialGolombCode()
+	if err != nil {
+		return
+	}
+	spsSubLayerOrderingInfoPresentFlag, err := br.ReadBit()
+	if err != nil {
+		return
+	}
+	var i uint
+	if spsSubLayerOrderingInfoPresentFlag != 0 {
+		i = 0
+	} else {
+		i = spsMaxSubLayersMinus1
+	}
+	for ; i <= spsMaxSubLayersMinus1; i++ {
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+		if _, err = br.ReadExponentialGolombCode(); err != nil {
+			return
+		}
+	}
+
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	if _, err = br.ReadExponentialGolombCode(); err != nil {
+		return
+	}
+	return
 }
 
-func ParseSPS(data []byte) (self SPSInfo, err error) {
-	r := &bits.GolombBitReader{R: bytes.NewReader(data)}
-
-	if _, err = r.ReadBits(8); err != nil {
-		return
+func parsePTL(br *bits.GolombBitReader, ctx *SPSInfo, maxSubLayersMinus1 uint) error {
+	var err error
+	var ptl SPSInfo
+	if ptl.generalProfileSpace, err = br.ReadBits(2); err != nil {
+		return err
 	}
-
-	if self.ProfileIdc, err = r.ReadBits(8); err != nil {
-		return
+	if ptl.generalTierFlag, err = br.ReadBit(); err != nil {
+		return err
 	}
-
-	// constraint_set0_flag-constraint_set6_flag,reserved_zero_2bits
-	if _, err = r.ReadBits(8); err != nil {
-		return
+	if ptl.generalProfileIDC, err = br.ReadBits(5); err != nil {
+		return err
 	}
-
-	// level_idc
-	if self.LevelIdc, err = r.ReadBits(8); err != nil {
-		return
+	if ptl.generalProfileCompatibilityFlags, err = br.ReadBits32(32); err != nil {
+		return err
 	}
-
-	// seq_parameter_set_id
-	if _, err = r.ReadExponentialGolombCode(); err != nil {
-		return
+	if ptl.generalConstraintIndicatorFlags, err = br.ReadBits64(48); err != nil {
+		return err
 	}
-
-	if self.ProfileIdc == 100 || self.ProfileIdc == 110 ||
-		self.ProfileIdc == 122 || self.ProfileIdc == 244 ||
-		self.ProfileIdc == 44 || self.ProfileIdc == 83 ||
-		self.ProfileIdc == 86 || self.ProfileIdc == 118 {
-
-		var chroma_format_idc uint
-		if chroma_format_idc, err = r.ReadExponentialGolombCode(); err != nil {
-			return
+	if ptl.generalLevelIDC, err = br.ReadBits(8); err != nil {
+		return err
+	}
+	updatePTL(ctx, &ptl)
+	if maxSubLayersMinus1 == 0 {
+		return nil
+	}
+	subLayerProfilePresentFlag := make([]uint, maxSubLayersMinus1)
+	subLayerLevelPresentFlag := make([]uint, maxSubLayersMinus1)
+	for i := uint(0); i < maxSubLayersMinus1; i++ {
+		if subLayerProfilePresentFlag[i], err = br.ReadBit(); err != nil {
+			return err
 		}
-
-		if chroma_format_idc == 3 {
-			// residual_colour_transform_flag
-			if _, err = r.ReadBit(); err != nil {
-				return
-			}
+		if subLayerLevelPresentFlag[i], err = br.ReadBit(); err != nil {
+			return err
 		}
-
-		// bit_depth_luma_minus8
-		if _, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		// bit_depth_chroma_minus8
-		if _, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		// qpprime_y_zero_transform_bypass_flag
-		if _, err = r.ReadBit(); err != nil {
-			return
-		}
-
-		var seq_scaling_matrix_present_flag uint
-		if seq_scaling_matrix_present_flag, err = r.ReadBit(); err != nil {
-			return
-		}
-
-		if seq_scaling_matrix_present_flag != 0 {
-			for i := 0; i < 8; i++ {
-				var seq_scaling_list_present_flag uint
-				if seq_scaling_list_present_flag, err = r.ReadBit(); err != nil {
-					return
-				}
-				if seq_scaling_list_present_flag != 0 {
-					var sizeOfScalingList uint
-					if i < 6 {
-						sizeOfScalingList = 16
-					} else {
-						sizeOfScalingList = 64
-					}
-					lastScale := uint(8)
-					nextScale := uint(8)
-					for j := uint(0); j < sizeOfScalingList; j++ {
-						if nextScale != 0 {
-							var delta_scale uint
-							if delta_scale, err = r.ReadSE(); err != nil {
-								return
-							}
-							nextScale = (lastScale + delta_scale + 256) % 256
-						}
-						if nextScale != 0 {
-							lastScale = nextScale
-						}
-					}
-				}
+	}
+	if maxSubLayersMinus1 > 0 {
+		for i := maxSubLayersMinus1; i < 8; i++ {
+			if _, err = br.ReadBits(2); err != nil {
+				return err
 			}
 		}
 	}
+	for i := uint(0); i < maxSubLayersMinus1; i++ {
+		if subLayerProfilePresentFlag[i] != 0 {
+			if _, err = br.ReadBits32(32); err != nil {
+				return err
+			}
+			if _, err = br.ReadBits32(32); err != nil {
+				return err
+			}
+			if _, err = br.ReadBits32(24); err != nil {
+				return err
+			}
+		}
 
-	// log2_max_frame_num_minus4
-	if _, err = r.ReadExponentialGolombCode(); err != nil {
-		return
-	}
-
-	var pic_order_cnt_type uint
-	if pic_order_cnt_type, err = r.ReadExponentialGolombCode(); err != nil {
-		return
-	}
-	if pic_order_cnt_type == 0 {
-		// log2_max_pic_order_cnt_lsb_minus4
-		if _, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-	} else if pic_order_cnt_type == 1 {
-		// delta_pic_order_always_zero_flag
-		if _, err = r.ReadBit(); err != nil {
-			return
-		}
-		// offset_for_non_ref_pic
-		if _, err = r.ReadSE(); err != nil {
-			return
-		}
-		// offset_for_top_to_bottom_field
-		if _, err = r.ReadSE(); err != nil {
-			return
-		}
-		var num_ref_frames_in_pic_order_cnt_cycle uint
-		if num_ref_frames_in_pic_order_cnt_cycle, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		for i := uint(0); i < num_ref_frames_in_pic_order_cnt_cycle; i++ {
-			if _, err = r.ReadSE(); err != nil {
-				return
+		if subLayerLevelPresentFlag[i] != 0 {
+			if _, err = br.ReadBits(8); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
 
-	// max_num_ref_frames
-	if _, err = r.ReadExponentialGolombCode(); err != nil {
-		return
-	}
+func updatePTL(ctx, ptl *SPSInfo) {
+	ctx.generalProfileSpace = ptl.generalProfileSpace
 
-	// gaps_in_frame_num_value_allowed_flag
-	if _, err = r.ReadBit(); err != nil {
-		return
-	}
+	if ptl.generalTierFlag > ctx.generalTierFlag {
+		ctx.generalLevelIDC = ptl.generalLevelIDC
 
-	if self.MbWidth, err = r.ReadExponentialGolombCode(); err != nil {
-		return
-	}
-	self.MbWidth++
-
-	if self.MbHeight, err = r.ReadExponentialGolombCode(); err != nil {
-		return
-	}
-	self.MbHeight++
-
-	var frame_mbs_only_flag uint
-	if frame_mbs_only_flag, err = r.ReadBit(); err != nil {
-		return
-	}
-	if frame_mbs_only_flag == 0 {
-		// mb_adaptive_frame_field_flag
-		if _, err = r.ReadBit(); err != nil {
-			return
+		ctx.generalTierFlag = ptl.generalTierFlag
+	} else {
+		if ptl.generalLevelIDC > ctx.generalLevelIDC {
+			ctx.generalLevelIDC = ptl.generalLevelIDC
 		}
 	}
 
-	// direct_8x8_inference_flag
-	if _, err = r.ReadBit(); err != nil {
-		return
+	if ptl.generalProfileIDC > ctx.generalProfileIDC {
+		ctx.generalProfileIDC = ptl.generalProfileIDC
 	}
 
-	var frame_cropping_flag uint
-	if frame_cropping_flag, err = r.ReadBit(); err != nil {
-		return
-	}
-	if frame_cropping_flag != 0 {
-		if self.CropLeft, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		if self.CropRight, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		if self.CropTop, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-		if self.CropBottom, err = r.ReadExponentialGolombCode(); err != nil {
-			return
-		}
-	}
+	ctx.generalProfileCompatibilityFlags &= ptl.generalProfileCompatibilityFlags
 
-	self.Width = (self.MbWidth * 16) - self.CropLeft*2 - self.CropRight*2
-	self.Height = ((2 - frame_mbs_only_flag) * self.MbHeight * 16) - self.CropTop*2 - self.CropBottom*2
+	ctx.generalConstraintIndicatorFlags &= ptl.generalConstraintIndicatorFlags
+}
 
-	return
+func nal2rbsp(nal []byte) []byte {
+	return bytes.Replace(nal, []byte{0x0, 0x0, 0x3}, []byte{0x0, 0x0}, -1)
 }
 
 type CodecData struct {
@@ -443,23 +478,20 @@ func NewCodecDataFromAVCDecoderConfRecord(record []byte) (self CodecData, err er
 
 func NewCodecDataFromVPSAndSPSAndPPS(vps, sps, pps []byte) (self CodecData, err error) {
 	recordinfo := AVCDecoderConfRecord{}
-	recordinfo.AVCProfileIndication = sps[1]
-	recordinfo.ProfileCompatibility = sps[2]
-	recordinfo.AVCLevelIndication = sps[3]
+	recordinfo.AVCProfileIndication = sps[3]
+	recordinfo.ProfileCompatibility = sps[4]
+	recordinfo.AVCLevelIndication = sps[5]
 	recordinfo.SPS = [][]byte{sps}
 	recordinfo.PPS = [][]byte{pps}
 	recordinfo.VPS = [][]byte{vps}
 	recordinfo.LengthSizeMinusOne = 3
-
-	buf := make([]byte, recordinfo.Len())
-	recordinfo.Marshal(buf)
-
-	self.RecordInfo = recordinfo
-	self.Record = buf
-
 	if self.SPSInfo, err = ParseSPS(sps); err != nil {
 		return
 	}
+	buf := make([]byte, recordinfo.Len())
+	recordinfo.Marshal(buf, self.SPSInfo)
+	self.RecordInfo = recordinfo
+	self.Record = buf
 	return
 }
 
@@ -480,14 +512,12 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 		err = ErrDecconfInvalid
 		return
 	}
-
 	self.AVCProfileIndication = b[1]
 	self.ProfileCompatibility = b[2]
 	self.AVCLevelIndication = b[3]
 	self.LengthSizeMinusOne = b[4] & 0x03
 	spscount := int(b[5] & 0x1f)
 	n += 6
-
 	for i := 0; i < spscount; i++ {
 		if len(b) < n+2 {
 			err = ErrDecconfInvalid
@@ -550,55 +580,63 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 }
 
 func (self AVCDecoderConfRecord) Len() (n int) {
-	n = 7
+	n = 23
 	for _, sps := range self.SPS {
-		n += 2 + len(sps)
+		n += 5 + len(sps)
 	}
 	for _, pps := range self.PPS {
-		n += 2 + len(pps)
+		n += 5 + len(pps)
 	}
 	for _, vps := range self.VPS {
-		n += 2 + len(vps)
+		n += 5 + len(vps)
 	}
 	return
 }
 
-func (self AVCDecoderConfRecord) Marshal(b []byte) (n int) {
+func (self AVCDecoderConfRecord) Marshal(b []byte, si SPSInfo) (n int) {
 	b[0] = 1
 	b[1] = self.AVCProfileIndication
 	b[2] = self.ProfileCompatibility
 	b[3] = self.AVCLevelIndication
-	b[4] = self.LengthSizeMinusOne | 0xfc
-	b[5] = uint8(len(self.SPS)) | 0xe0
-	n += 6
-
-	for _, sps := range self.SPS {
-		pio.PutU16BE(b[n:], uint16(len(sps)))
-		n += 2
-		copy(b[n:], sps)
-		n += len(sps)
-	}
-
-	b[n] = uint8(len(self.PPS))
+	b[21] = 3
+	b[22] = 3
+	n += 23
+	b[n] = (self.VPS[0][0] >> 1) & 0x3f
 	n++
-
-	for _, pps := range self.PPS {
-		pio.PutU16BE(b[n:], uint16(len(pps)))
-		n += 2
-		copy(b[n:], pps)
-		n += len(pps)
-	}
-
-	b[n] = uint8(len(self.VPS))
+	b[n] = byte(len(self.VPS) >> 8)
 	n++
-
+	b[n] = byte(len(self.VPS))
+	n++
 	for _, vps := range self.VPS {
 		pio.PutU16BE(b[n:], uint16(len(vps)))
 		n += 2
 		copy(b[n:], vps)
 		n += len(vps)
 	}
-
+	b[n] = (self.SPS[0][0] >> 1) & 0x3f
+	n++
+	b[n] = byte(len(self.SPS) >> 8)
+	n++
+	b[n] = byte(len(self.SPS))
+	n++
+	for _, sps := range self.SPS {
+		pio.PutU16BE(b[n:], uint16(len(sps)))
+		n += 2
+		copy(b[n:], sps)
+		n += len(sps)
+	}
+	b[n] = (self.PPS[0][0] >> 1) & 0x3f
+	n++
+	b[n] = byte(len(self.PPS) >> 8)
+	n++
+	b[n] = byte(len(self.PPS))
+	n++
+	for _, pps := range self.PPS {
+		pio.PutU16BE(b[n:], uint16(len(pps)))
+		n += 2
+		copy(b[n:], pps)
+		n += len(pps)
+	}
 	return
 }
 
@@ -623,17 +661,13 @@ const (
 )
 
 func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
-
 	if len(packet) <= 1 {
 		err = fmt.Errorf("h265parser: packet too short to parse slice header")
 		return
 	}
-
 	nal_unit_type := packet[0] & 0x1f
 	switch nal_unit_type {
 	case 1, 2, 5, 19:
-		// slice_layer_without_partitioning_rbsp
-		// slice_data_partition_a_layer_rbsp
 
 	default:
 		err = fmt.Errorf("h265parser: nal_unit_type=%d has no slice header", nal_unit_type)
@@ -641,13 +675,9 @@ func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
 	}
 
 	r := &bits.GolombBitReader{R: bytes.NewReader(packet[1:])}
-
-	// first_mb_in_slice
 	if _, err = r.ReadExponentialGolombCode(); err != nil {
 		return
 	}
-
-	// slice_type
 	var u uint
 	if u, err = r.ReadExponentialGolombCode(); err != nil {
 		return
@@ -664,6 +694,5 @@ func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
 		err = fmt.Errorf("h265parser: slice_type=%d invalid", u)
 		return
 	}
-
 	return
 }

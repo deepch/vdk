@@ -181,6 +181,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 	} else if self.Type() == av.H265 {
 		codec := self.CodecData.(h265parser.CodecData)
 		width, height := codec.Width(), codec.Height()
+
 		self.sample.SampleDesc.HV1Desc = &mp4io.HV1Desc{
 			DataRefIdx:           1,
 			HorizontalResolution: 72,
@@ -192,6 +193,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 			ColorTableId:         -1,
 			Conf:                 &mp4io.HV1Conf{Data: codec.AVCDecoderConfRecordBytes()},
 		}
+
 		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
 			SubType: [4]byte{'v', 'i', 'd', 'e'},
 			Name:    []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'G', 'G', 0, 0, 0},
@@ -200,6 +202,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 			Flags: 0x000001,
 		}
 		self.codecString = fmt.Sprintf("hvc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
+
 	} else if self.Type() == av.AAC {
 		codec := self.CodecData.(aacparser.CodecData)
 		self.sample.SampleDesc.MP4ADesc = &mp4io.MP4ADesc{
@@ -354,6 +357,7 @@ func (element *Stream) writePacketV3(pkt av.Packet, rawdur time.Duration, maxFra
 }
 
 func (element *Stream) writePacketV2(pkt av.Packet, rawdur time.Duration, maxFrames int) (bool, []byte, error) {
+	//pkt.Data = pkt.Data[4:]
 	trackID := pkt.Idx + 1
 	if element.sampleIndex == 0 {
 		element.moof.Header = &mp4fio.MovieFragHeader{Seqnum: uint32(element.muxer.fragmentIndex + 1)}
