@@ -224,6 +224,9 @@ func (client *RTSPClient) ControlTrack(track string) string {
 	if strings.Contains(track, "rtsp://") {
 		return track
 	}
+	if !strings.HasSuffix(client.control, "/") {
+		track = "/" + track
+	}
 	return client.control + track
 }
 
