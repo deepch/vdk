@@ -208,7 +208,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 			}
 		case av.PCM_ALAW:
 		case av.OPUS:
-		case av.PCM_ALAW:
+		case av.PCM_MULAW:
 		case av.AAC:
 			//TODO: NEED ADD DECODER AND ENCODER
 			return ErrorCodecNotSupported
