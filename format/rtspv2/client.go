@@ -43,6 +43,7 @@ const (
 	OPTIONS  = "OPTIONS"
 	PLAY     = "PLAY"
 	SETUP    = "SETUP"
+	TEARDOWN = "TEARDOWN"
 )
 
 type RTSPClient struct {
@@ -458,6 +459,8 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 
 func (client *RTSPClient) Close() {
 	if client.conn != nil {
+		client.conn.SetDeadline(time.Now().Add(time.Second))
+		client.request(TEARDOWN, nil, client.control, false, true)
 		err := client.conn.Close()
 		client.Println("RTSP Client Close", err)
 	}
@@ -744,7 +747,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			return retmap, true
 		}
 	default:
-		client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
+		//client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
 	}
 	return nil, false
 }
@@ -764,6 +767,7 @@ func (client *RTSPClient) CodecUpdateSPS(val []byte) {
 	var err error
 	switch client.videoCodec {
 	case av.H264:
+		client.Println("Codec Update SPS", val)
 		codecData, err = h264parser.NewCodecDataFromSPSAndPPS(val, client.pps)
 		if err != nil {
 			client.Println("Parse Codec Data Error", err)
@@ -803,6 +807,7 @@ func (client *RTSPClient) CodecUpdatePPS(val []byte) {
 	var err error
 	switch client.videoCodec {
 	case av.H264:
+		client.Println("Codec Update PPS", val)
 		codecData, err = h264parser.NewCodecDataFromSPSAndPPS(client.sps, val)
 		if err != nil {
 			client.Println("Parse Codec Data Error", err)
