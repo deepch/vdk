@@ -11,8 +11,8 @@ import (
 
 const (
 	NALU_SEI = 6
-	NALU_PPS = 7
-	NALU_SPS = 8
+	NALU_SPS = 7
+	NALU_PPS = 8
 	NALU_AUD = 9
 )
 
