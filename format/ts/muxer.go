@@ -169,7 +169,6 @@ func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
 	switch stream.Type() {
 	case av.AAC:
 		codec := stream.CodecData.(aacparser.CodecData)
-
 		n := tsio.FillPESHeader(self.peshdr, tsio.StreamIdAAC, len(self.adtshdr)+len(pkt.Data), pkt.Time, 0)
 		self.datav[0] = self.peshdr[:n]
 		aacparser.FillADTSHeader(self.adtshdr, codec.Config, 1024, len(pkt.Data))

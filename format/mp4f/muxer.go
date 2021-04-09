@@ -307,7 +307,46 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 	}
 	return got, buf, err
 }
+func (element *Muxer) WritePacket4(pkt av.Packet) error {
+	stream := element.streams[pkt.Idx]
+	return stream.writePacketV4(pkt)
+}
+func (element *Stream) writePacketV4(pkt av.Packet) error {
+	trackID := pkt.Idx + 1
+	if element.sampleIndex == 0 {
+		element.moof.Header = &mp4fio.MovieFragHeader{Seqnum: uint32(element.muxer.fragmentIndex + 1)}
+		element.moof.Tracks = []*mp4fio.TrackFrag{
+			&mp4fio.TrackFrag{
+				Header: &mp4fio.TrackFragHeader{
+					Data: []byte{0x00, 0x02, 0x00, 0x20, 0x00, 0x00, 0x00, uint8(trackID), 0x01, 0x01, 0x00, 0x00},
+				},
+				DecodeTime: &mp4fio.TrackFragDecodeTime{
+					Version: 1,
+					Flags:   0,
+					Time:    uint64(element.timeToTs(pkt.Time)),
+				},
+				Run: &mp4fio.TrackFragRun{
+					Flags:            0x000b05,
+					FirstSampleFlags: 0x02000000,
+					DataOffset:       0,
+					Entries:          []mp4io.TrackFragRunEntry{},
+				},
+			},
+		}
+		element.buffer = []byte{0x00, 0x00, 0x00, 0x00, 0x6d, 0x64, 0x61, 0x74}
+	}
+	runEnrty := mp4io.TrackFragRunEntry{
+		Duration: uint32(element.timeToTs(pkt.Duration)),
+		Size:     uint32(len(pkt.Data)),
+		Cts:      uint32(element.timeToTs(pkt.CompositionTime)),
+	}
+	element.moof.Tracks[0].Run.Entries = append(element.moof.Tracks[0].Run.Entries, runEnrty)
+	element.buffer = append(element.buffer, pkt.Data...)
+	element.sampleIndex++
+	element.dts += element.timeToTs(pkt.Duration)
 
+	return nil
+}
 func (element *Stream) writePacketV3(pkt av.Packet, rawdur time.Duration, maxFrames int) (bool, []byte, error) {
 	trackID := pkt.Idx + 1
 	var out []byte
@@ -355,9 +394,27 @@ func (element *Stream) writePacketV3(pkt av.Packet, rawdur time.Duration, maxFra
 	element.dts += element.timeToTs(rawdur)
 	return got, out, nil
 }
+func (element *Muxer) Finalize() []byte {
+	stream := element.streams[0]
+	stream.moof.Tracks[0].Run.DataOffset = uint32(stream.moof.Len() + 8)
+	out := make([]byte, stream.moof.Len()+len(stream.buffer))
+	stream.moof.Marshal(out)
+	PutU32BE(stream.buffer, uint32(len(stream.buffer)))
+	copy(out[stream.moof.Len():], stream.buffer)
+	stream.sampleIndex = 0
+	stream.muxer.fragmentIndex++
+	return out
 
+}
+
+//PutU32BE func
+func PutU32BE(b []byte, v uint32) {
+	b[0] = byte(v >> 24)
+	b[1] = byte(v >> 16)
+	b[2] = byte(v >> 8)
+	b[3] = byte(v)
+}
 func (element *Stream) writePacketV2(pkt av.Packet, rawdur time.Duration, maxFrames int) (bool, []byte, error) {
-	//pkt.Data = pkt.Data[4:]
 	trackID := pkt.Idx + 1
 	if element.sampleIndex == 0 {
 		element.moof.Header = &mp4fio.MovieFragHeader{Seqnum: uint32(element.muxer.fragmentIndex + 1)}
