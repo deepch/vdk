@@ -227,6 +227,9 @@ func SplitNALUs(b []byte) (nalus [][]byte, typ int) {
 		_b := b[4:]
 		nalus := [][]byte{}
 		for {
+			if _val4 > uint32(len(_b)) {
+				break
+			}
 			nalus = append(nalus, _b[:_val4])
 			_b = _b[_val4:]
 			if len(_b) < 4 {

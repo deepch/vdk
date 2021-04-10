@@ -555,6 +555,9 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			client.BufferRtpPacket.Reset()
 		}
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
+		if len(nalRaw) == 0 || len(nalRaw[0]) == 0 {
+			return nil, false
+		}
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
 			if client.videoCodec == av.H265 {
@@ -637,7 +640,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						if isEnd {
 							client.fuStarted = false
 							naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
-							if naluTypef == 7 {
+							if naluTypef == 7 || naluTypef == 9 {
 								bufered, _ := h264parser.SplitNALUs(append([]byte{0, 0, 0, 1}, client.BufferRtpPacket.Bytes()...))
 								for _, v := range bufered {
 									naluTypefs := v[0] & 0x1f
