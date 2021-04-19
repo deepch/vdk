@@ -37,9 +37,16 @@ type Stream struct {
 	track *webrtc.TrackLocalStaticSample
 }
 type Options struct {
+	// ICEServers is a required array of ICE server URLs to connect to (e.g., STUN or TURN server URLs)
 	ICEServers []string
-	PortMin    uint16
-	PortMax    uint16
+	// ICEUsername is an optional username for authenticating with the given ICEServers
+	ICEUsername string
+	// ICECredential is an optional credential (i.e., password) for authenticating with the given ICEServers
+	ICECredential string
+	// PortMin is an optional minimum (inclusive) ephemeral UDP port range for the ICEServers connections
+	PortMin uint16
+	// PortMin is an optional maximum (inclusive) ephemeral UDP port range for the ICEServers connections
+	PortMax uint16
 }
 
 func NewMuxer(options Options) *Muxer {
@@ -50,7 +57,12 @@ func NewMuxer(options Options) *Muxer {
 func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*webrtc.PeerConnection, error) {
 	if len(element.Options.ICEServers) > 0 {
 		log.Println("Set ICEServers", element.Options.ICEServers)
-		configuration.ICEServers = append(configuration.ICEServers, webrtc.ICEServer{URLs: element.Options.ICEServers})
+		configuration.ICEServers = append(configuration.ICEServers, webrtc.ICEServer{
+			URLs:           element.Options.ICEServers,
+			Username:       element.Options.ICEUsername,
+			Credential:     element.Options.ICECredential,
+			CredentialType: webrtc.ICECredentialTypePassword,
+		})
 	}
 	m := &webrtc.MediaEngine{}
 	if err := m.RegisterDefaultCodecs(); err != nil {
