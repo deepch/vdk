@@ -101,6 +101,10 @@ func Parse(content string) (sess Session, medias []Media) {
 								media.Type = av.H265
 							case "HEVC":
 								media.Type = av.H265
+							case "PCMA":
+								media.Type = av.PCM_ALAW
+							case "PCMU":
+								media.Type = av.PCM_MULAW
 							}
 							if i, err := strconv.Atoi(keyval[1]); err == nil {
 								media.TimeScale = i
