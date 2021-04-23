@@ -51,7 +51,7 @@ type Options struct {
 
 func NewMuxer(options Options) *Muxer {
 	tmp := Muxer{Options: options, ClientACK: time.NewTimer(time.Second * 20), StreamACK: time.NewTimer(time.Second * 20), streams: make(map[int8]*Stream)}
-	go tmp.WaitCloser()
+	//go tmp.WaitCloser()
 	return &tmp
 }
 func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*webrtc.PeerConnection, error) {
@@ -197,7 +197,6 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 	if element.stop {
 		return ErrorClientOffline
 	}
-	//Wait client ICEConnectionStateConnected
 	if element.status == webrtc.ICEConnectionStateChecking {
 		WritePacketSuccess = true
 		return nil
@@ -240,24 +239,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 		return nil
 	}
 }
-func (element *Muxer) WaitCloser() {
-	waitT := time.NewTimer(time.Second * 10)
-	for {
-		select {
-		case <-waitT.C:
-			if element.stop {
-				return
-			}
-			waitT.Reset(time.Second * 10)
-		case <-element.StreamACK.C:
-			log.Println("Stream Not Send Video Close")
-			element.Close()
-		case <-element.ClientACK.C:
-			log.Println("Client Not Send ACK (probably the browser is minimized) or tab not active Close client")
-			element.Close()
-		}
-	}
-}
+
 func (element *Muxer) Close() error {
 	element.stop = true
 	if element.pc != nil {
