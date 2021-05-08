@@ -85,6 +85,7 @@ type RTSPClient struct {
 	PreAudioTS          int64
 	PreVideoTS          int64
 	PreSequenceNumber   int
+	FPS                 int
 }
 
 type RTSPClientOptions struct {
@@ -153,6 +154,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 				} else {
 					client.CodecData = append(client.CodecData, h264parser.CodecData{})
 				}
+				client.FPS = i2.FPS
 				client.videoCodec = av.H264
 			} else if i2.Type == av.H265 {
 				if len(i2.SpropVPS) > 1 && len(i2.SpropSPS) > 1 && len(i2.SpropPPS) > 1 {

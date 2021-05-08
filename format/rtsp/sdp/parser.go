@@ -18,6 +18,7 @@ type Session struct {
 type Media struct {
 	AVType             string
 	Type               av.CodecType
+	FPS                int
 	TimeScale          int
 	Control            string
 	Rtpmap             int
@@ -37,6 +38,10 @@ func Parse(content string) (sess Session, medias []Media) {
 
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
+		////Camera [BUG] a=x-framerate: 25
+		if strings.Contains(line, "x-framerate") {
+			line = strings.Replace(line, " ", "", -1)
+		}
 		typeval := strings.SplitN(line, "=", 2)
 		if len(typeval) == 2 {
 			fields := strings.SplitN(typeval[1], " ", 2)
@@ -78,6 +83,8 @@ func Parse(content string) (sess Session, medias []Media) {
 								media.Control = val
 							case "rtpmap":
 								media.Rtpmap, _ = strconv.Atoi(val)
+							case "x-framerate":
+								media.FPS, _ = strconv.Atoi(val)
 							}
 						}
 						keyval = strings.Split(field, "/")

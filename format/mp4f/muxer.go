@@ -10,6 +10,7 @@ import (
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/codec/h265parser"
+	"github.com/deepch/vdk/format/fmp4/fmp4io"
 	"github.com/deepch/vdk/format/mp4/mp4io"
 	"github.com/deepch/vdk/format/mp4f/mp4fio"
 	"github.com/deepch/vdk/utils/bits/pio"
@@ -312,6 +313,11 @@ func (element *Muxer) WritePacket4(pkt av.Packet) error {
 	return stream.writePacketV4(pkt)
 }
 func (element *Stream) writePacketV4(pkt av.Packet) error {
+	//pkt.Data = pkt.Data[4:]
+	defaultFlags := fmp4io.SampleNonKeyframe
+	if pkt.IsKeyFrame {
+		defaultFlags = fmp4io.SampleNoDependencies
+	}
 	trackID := pkt.Idx + 1
 	if element.sampleIndex == 0 {
 		element.moof.Header = &mp4fio.MovieFragHeader{Seqnum: uint32(element.muxer.fragmentIndex + 1)}
@@ -327,7 +333,7 @@ func (element *Stream) writePacketV4(pkt av.Packet) error {
 				},
 				Run: &mp4fio.TrackFragRun{
 					Flags:            0x000b05,
-					FirstSampleFlags: 0x02000000,
+					FirstSampleFlags: uint32(defaultFlags),
 					DataOffset:       0,
 					Entries:          []mp4io.TrackFragRunEntry{},
 				},
@@ -339,13 +345,18 @@ func (element *Stream) writePacketV4(pkt av.Packet) error {
 		Duration: uint32(element.timeToTs(pkt.Duration)),
 		Size:     uint32(len(pkt.Data)),
 		Cts:      uint32(element.timeToTs(pkt.CompositionTime)),
+		Flags:    uint32(defaultFlags),
 	}
+	//log.Println("packet", defaultFlags,pkt.Duration,  pkt.CompositionTime)
 	element.moof.Tracks[0].Run.Entries = append(element.moof.Tracks[0].Run.Entries, runEnrty)
 	element.buffer = append(element.buffer, pkt.Data...)
 	element.sampleIndex++
 	element.dts += element.timeToTs(pkt.Duration)
 
 	return nil
+}
+func (element *Muxer) SetIndex(val int) {
+	element.fragmentIndex = val
 }
 func (element *Stream) writePacketV3(pkt av.Packet, rawdur time.Duration, maxFrames int) (bool, []byte, error) {
 	trackID := pkt.Idx + 1
