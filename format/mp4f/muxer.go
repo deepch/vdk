@@ -405,8 +405,8 @@ func (element *Stream) writePacketV3(pkt av.Packet, rawdur time.Duration, maxFra
 	element.dts += element.timeToTs(rawdur)
 	return got, out, nil
 }
-func (element *Muxer) Finalize() []byte {
-	stream := element.streams[0]
+func (element *Muxer) Finalize(pktIdx int8) []byte {
+	stream := element.streams[pktIdx]
 	stream.moof.Tracks[0].Run.DataOffset = uint32(stream.moof.Len() + 8)
 	out := make([]byte, stream.moof.Len()+len(stream.buffer))
 	stream.moof.Marshal(out)
@@ -415,7 +415,6 @@ func (element *Muxer) Finalize() []byte {
 	stream.sampleIndex = 0
 	stream.muxer.fragmentIndex++
 	return out
-
 }
 
 //PutU32BE func
