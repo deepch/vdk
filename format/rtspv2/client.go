@@ -871,6 +871,8 @@ func (client *RTSPClient) Println(v ...interface{}) {
 		log.Println(v)
 	}
 }
+
+//binSize
 func binSize(val int) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(val))
