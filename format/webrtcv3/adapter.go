@@ -93,7 +93,9 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 		Type: webrtc.SDPTypeOffer,
 		SDP:  string(sdpB),
 	}
-	peerConnection, err := element.NewPeerConnection(webrtc.Configuration{})
+	peerConnection, err := element.NewPeerConnection(webrtc.Configuration{
+		SDPSemantics: webrtc.SDPSemanticsUnifiedPlanWithFallback,
+	})
 	if err != nil {
 		return "", err
 	}
