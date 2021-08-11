@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
+	//"log"
 	"net"
 	"net/textproto"
 	"net/url"
@@ -806,7 +806,9 @@ func (self *Stream) makeCodecData() (err error) {
 				return
 			}
 		default:
-			log.Fatalln("Fix Format may be raw PCM 97", media.PayloadType, media.Type)
+			//log.Fatalln("Fix Format may be raw PCM 97", media.PayloadType, media.Type)
+			err = fmt.Errorf("rtsp: Type=%d unsupported", media.Type)
+			return
 		}
 	} else {
 		switch media.PayloadType {
