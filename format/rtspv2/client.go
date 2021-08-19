@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ const (
 	PLAY     = "PLAY"
 	SETUP    = "SETUP"
 	TEARDOWN = "TEARDOWN"
+	GET_PARAMETER = "GET_PARAMETER"
 )
 
 type RTSPClient struct {
@@ -86,6 +88,7 @@ type RTSPClient struct {
 	PreVideoTS          int64
 	PreSequenceNumber   int
 	FPS                 int
+	keepalive           int
 }
 
 type RTSPClientOptions struct {
@@ -110,6 +113,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		audioIDX:            -2,
 		options:             options,
 		AudioTimeScale:      8000,
+		keepalive:           getKeepalive(60),
 	}
 	client.headers["User-Agent"] = "Lavf58.20.100"
 	err := client.parseURL(html.UnescapeString(client.options.URL))
@@ -247,8 +251,8 @@ func (client *RTSPClient) startStream() {
 			client.Println("RTSP Client RTP SetDeadline", err)
 			return
 		}
-		if int(time.Now().Sub(timer).Seconds()) > 25 {
-			err := client.request(OPTIONS, map[string]string{"Require": "implicit-play"}, client.control, false, true)
+		if int(time.Now().Sub(timer).Seconds()) > client.keepalive {
+			err := client.request(GET_PARAMETER, map[string]string{"Require": "implicit-play"}, client.control, false, true)
 			if err != nil {
 				client.Println("RTSP Client RTP keep-alive", err)
 				return
@@ -391,6 +395,12 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 			if len(splits) == 2 {
 				if splits[0] == "Content-length" {
 					splits[0] = "Content-Length"
+				} else if splits[0] == "Session" {
+					timeout := getTimeout(splits[1])
+					if timeout > 0 {
+						client.keepalive = getKeepalive(timeout)
+						client.Println("RTSP Client keepalive:", client.keepalive)
+					}
 				}
 				res[splits[0]] = splits[1]
 			}
@@ -877,4 +887,26 @@ func binSize(val int) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(val))
 	return buf
+}
+
+
+func getKeepalive(timeout int) int {
+	keepalive := int(float64(timeout) * 0.45)
+	if keepalive == 0 {
+		keepalive = 1
+	}
+	return keepalive
+}
+
+func getTimeout(str string) int {
+	reg1, err := regexp.Compile(`timeout *= *(\d+)`)
+	if err != nil {
+		return 0
+	}
+	ret := reg1.FindStringSubmatch(strings.ToLower(str))
+	if len(ret) > 1 {
+		i, _ := strconv.Atoi(ret[1])
+		return i
+	}
+	return 0
 }
