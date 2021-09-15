@@ -736,7 +736,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 					if _, _, _, _, err := aacparser.ParseADTSHeader(frame); err == nil {
 						frame = frame[7:]
 					}
-					duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000) * time.Millisecond
+					duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000*1000*1000) * time.Nanosecond
 					client.AudioTimeLine += duration
 					retmap = append(retmap, &av.Packet{
 						Data:            frame,
