@@ -805,8 +805,14 @@ func (self *Stream) makeCodecData() (err error) {
 				err = fmt.Errorf("rtsp: aac sdp config invalid: %s", err)
 				return
 			}
+		case av.OPUS:
+			channelLayout := av.CH_MONO
+			if media.ChannelCount == 2 {
+				channelLayout = av.CH_STEREO
+			}
+
+			self.CodecData = codec.NewOpusCodecData(media.TimeScale, channelLayout)
 		default:
-			//log.Fatalln("Fix Format may be raw PCM 97", media.PayloadType, media.Type)
 			err = fmt.Errorf("rtsp: Type=%d unsupported", media.Type)
 			return
 		}
