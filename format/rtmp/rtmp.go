@@ -201,8 +201,8 @@ func NewConn(netconn net.Conn) *Conn {
 	conn.bufr = bufio.NewReaderSize(netconn, pio.RecommendBufioSize)
 	conn.bufw = bufio.NewWriterSize(netconn, pio.RecommendBufioSize)
 	conn.txrxcount = &txrxcount{ReadWriter: netconn}
-	conn.writebuf = make([]byte, 4096)
-	conn.readbuf = make([]byte, 4096)
+	conn.writebuf = make([]byte, 256)
+	conn.readbuf = make([]byte, 256)
 	conn.chunkHeaderBuf = make([]byte, 265)
 	conn.chunkHeaderBufExt = make([]byte, 12+4+4)
 	return conn
