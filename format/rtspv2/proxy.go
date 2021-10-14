@@ -40,6 +40,7 @@ func NewProxyConn(netconn net.Conn) *ProxyConn {
 	conn.writebuf = make([]byte, 4096)
 	conn.readbuf = make([]byte, 4096)
 	conn.session = uuid.New().String()
+	conn.cseq = 1
 	return conn
 }
 
@@ -144,7 +145,6 @@ func (self *ProxyConn) prepare() error {
 	if err != nil {
 		return err
 	}
-
 	allStringsSlice := strings.Split(string(self.readbuf[:n]), "\r\n")
 	if len(allStringsSlice) == 0 {
 		return errors.New("no cmd")

@@ -174,6 +174,10 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 					client.CodecData = append(client.CodecData, h265parser.CodecData{})
 				}
 				client.videoCodec = av.H265
+				//} else if i2.Type == av.JPEG {
+				//	client.CodecData = append(client.CodecData, h264parser.CodecData{})
+				//	client.WaitCodec = true
+				//	client.videoCodec = av.H264
 			} else {
 				client.Println("SDP Video Codec Type Not Supported", m.Type)
 			}
@@ -220,7 +224,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		}
 		ch += 2
 	}
-
+  // test := map[string]string{"Scale": "1.000000", "Speed": "1.000000", "Range": "clock=20210929T210000Z-20210929T211000Z"}
 	err = client.request(PLAY, nil, client.control, nil, false, false)
 	if err != nil {
 		return nil, err
@@ -726,7 +730,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						client.BufferRtpPacket.Write(nal[3:])
 					}
 				default:
-					client.Println("Unsupported Nal", naluType)
+					//client.Println("Unsupported Nal", naluType)
 				}
 
 			} else if client.videoCodec == av.H264 {
@@ -793,7 +797,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						}
 					}
 				default:
-					client.Println("Unsupported NAL Type", naluType)
+					//client.Println("Unsupported NAL Type", naluType)
 				}
 			}
 		}

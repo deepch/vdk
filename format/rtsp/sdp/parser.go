@@ -104,6 +104,8 @@ func Parse(content string) (sess Session, medias []Media) {
 								}
 							case "H264":
 								media.Type = av.H264
+							case "JPEG":
+								media.Type = av.JPEG
 							case "H265":
 								media.Type = av.H265
 							case "HEVC":

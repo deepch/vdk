@@ -117,6 +117,10 @@ type CodecType uint32
 var (
 	H264       = MakeVideoCodecType(avCodecTypeMagic + 1)
 	H265       = MakeVideoCodecType(avCodecTypeMagic + 2)
+	JPEG       = MakeVideoCodecType(avCodecTypeMagic + 3)
+	VP8        = MakeVideoCodecType(avCodecTypeMagic + 4)
+	VP9        = MakeVideoCodecType(avCodecTypeMagic + 5)
+	AV1        = MakeVideoCodecType(avCodecTypeMagic + 6)
 	AAC        = MakeAudioCodecType(avCodecTypeMagic + 1)
 	PCM_MULAW  = MakeAudioCodecType(avCodecTypeMagic + 2)
 	PCM_ALAW   = MakeAudioCodecType(avCodecTypeMagic + 3)
@@ -135,6 +139,14 @@ func (self CodecType) String() string {
 		return "H264"
 	case H265:
 		return "H265"
+	case JPEG:
+		return "JPEG"
+	case VP8:
+		return "VP8"
+	case VP9:
+		return "VP9"
+	case AV1:
+		return "AV1"
 	case AAC:
 		return "AAC"
 	case PCM_MULAW:
