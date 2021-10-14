@@ -242,6 +242,7 @@ type Packet struct {
 	Time            time.Duration // packet decode time
 	Duration        time.Duration //packet duration
 	Data            []byte        // packet data
+	NaluType        byte
 }
 
 // Raw audio frame.
