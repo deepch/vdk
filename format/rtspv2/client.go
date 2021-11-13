@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -124,6 +125,14 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	err = conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 	if err != nil {
 		return nil, err
+	}
+	if client.pURL.Scheme == "rtsps" {
+		tlsConn := tls.Client(conn, &tls.Config{ServerName: client.pURL.Hostname()})
+		err = tlsConn.Handshake()
+		if err != nil {
+			return nil, err
+		}
+		conn = tlsConn
 	}
 	client.conn = conn
 	client.connRW = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
@@ -485,7 +494,7 @@ func (client *RTSPClient) parseURL(rawURL string) error {
 	if l.Port() == "" {
 		l.Host = fmt.Sprintf("%s:%s", l.Host, "554")
 	}
-	if l.Scheme != "rtsp" {
+	if l.Scheme != "rtsp" && l.Scheme != "rtsps" {
 		l.Scheme = "rtsp"
 	}
 	client.pURL = l
