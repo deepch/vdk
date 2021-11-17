@@ -43,6 +43,8 @@ type Options struct {
 	ICEUsername string
 	// ICECredential is an optional credential (i.e., password) for authenticating with the given ICEServers
 	ICECredential string
+	// ICECandidates sets a list of external IP addresses of 1:1
+	ICECandidates []string
 	// PortMin is an optional minimum (inclusive) ephemeral UDP port range for the ICEServers connections
 	PortMin uint16
 	// PortMin is an optional maximum (inclusive) ephemeral UDP port range for the ICEServers connections
@@ -76,6 +78,10 @@ func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*we
 	if element.Options.PortMin > 0 && element.Options.PortMax > 0 && element.Options.PortMax > element.Options.PortMin {
 		s.SetEphemeralUDPPortRange(element.Options.PortMin, element.Options.PortMax)
 		log.Println("Set UDP ports to", element.Options.PortMin, "..", element.Options.PortMax)
+	}
+	if len(element.Options.ICECandidates) > 0 {
+		s.SetNAT1To1IPs(element.Options.ICECandidates, webrtc.ICECandidateTypeHost)
+		log.Println("Set ICECandidates", element.Options.ICECandidates)
 	}
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i), webrtc.WithSettingEngine(s))
 	return api.NewPeerConnection(configuration)
