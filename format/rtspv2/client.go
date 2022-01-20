@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/deepch/vdk/utils"
 	"html"
 	"io"
 	"log"
@@ -136,11 +137,11 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	}
 	client.conn = conn
 	client.connRW = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
-	err = client.request(OPTIONS, nil, client.pURL.String(), false, false)
+	err = client.request(OPTIONS, nil, utils.ParseURLToString(client.pURL), false, false)
 	if err != nil {
 		return nil, err
 	}
-	err = client.request(DESCRIBE, map[string]string{"Accept": "application/sdp"}, client.pURL.String(), false, false)
+	err = client.request(DESCRIBE, map[string]string{"Accept": "application/sdp"}, utils.ParseURLToString(client.pURL), false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +501,7 @@ func (client *RTSPClient) parseURL(rawURL string) error {
 	client.pURL = l
 	client.username = username
 	client.password = password
-	client.control = l.String()
+	client.control = utils.ParseURLToString(l)
 	return nil
 }
 
