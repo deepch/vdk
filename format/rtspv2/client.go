@@ -128,7 +128,6 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		return nil, err
 	}
 	if client.pURL.Scheme == "rtsps" {
-
 		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: options.InsecureSkipVerify, ServerName: client.pURL.Hostname()})
 		err = tlsConn.Handshake()
 		if err != nil {
