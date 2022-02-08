@@ -91,12 +91,13 @@ type RTSPClient struct {
 }
 
 type RTSPClientOptions struct {
-	Debug            bool
-	URL              string
-	DialTimeout      time.Duration
-	ReadWriteTimeout time.Duration
-	DisableAudio     bool
-	OutgoingProxy    bool
+	Debug              bool
+	URL                string
+	DialTimeout        time.Duration
+	ReadWriteTimeout   time.Duration
+	DisableAudio       bool
+	OutgoingProxy      bool
+	InsecureSkipVerify bool
 }
 
 func Dial(options RTSPClientOptions) (*RTSPClient, error) {
@@ -113,7 +114,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		options:             options,
 		AudioTimeScale:      8000,
 	}
-	client.headers["User-Agent"] = "Lavf58.20.100"
+	client.headers["User-Agent"] = "Lavf58.76.100"
 	err := client.parseURL(html.UnescapeString(client.options.URL))
 	if err != nil {
 		return nil, err
@@ -127,7 +128,8 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		return nil, err
 	}
 	if client.pURL.Scheme == "rtsps" {
-		tlsConn := tls.Client(conn, &tls.Config{ServerName: client.pURL.Hostname()})
+
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: options.InsecureSkipVerify, ServerName: client.pURL.Hostname()})
 		err = tlsConn.Handshake()
 		if err != nil {
 			return nil, err
@@ -179,10 +181,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 					client.CodecData = append(client.CodecData, h265parser.CodecData{})
 				}
 				client.videoCodec = av.H265
-				//} else if i2.Type == av.JPEG {
-				//	client.CodecData = append(client.CodecData, h264parser.CodecData{})
-				//	client.WaitCodec = true
-				//	client.videoCodec = av.H264
+
 			} else {
 				client.Println("SDP Video Codec Type Not Supported", i2.Type)
 			}
@@ -295,6 +294,7 @@ func (client *RTSPClient) startStream() {
 				client.Println("RTSP Client RTP ReadFull", err)
 				return
 			}
+
 			//atomic.AddInt64(&client.Bitrate, int64(length+4))
 			if client.options.OutgoingProxy {
 				if len(client.OutgoingProxyQueue) < 2000 {
@@ -308,6 +308,7 @@ func (client *RTSPClient) startStream() {
 			if !got {
 				continue
 			}
+
 			for _, i2 := range pkt {
 				if len(client.OutgoingPacketQueue) > 2000 {
 					client.Println("RTSP Client OutgoingPacket Chanel Full")
