@@ -88,6 +88,7 @@ type RTSPClient struct {
 	PreSequenceNumber   int
 	FPS                 int
 	WaitCodec           bool
+	chTMP               int
 }
 
 type RTSPClientOptions struct {
@@ -145,12 +146,12 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ch int
+
 	for _, i2 := range client.mediaSDP {
 		if (i2.AVType != VIDEO && i2.AVType != AUDIO) || (client.options.DisableAudio && i2.AVType == AUDIO) {
 			continue
 		}
-		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(ch) + "-" + strconv.Itoa(ch+1)}, client.ControlTrack(i2.Control), false, false)
+		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(client.chTMP) + "-" + strconv.Itoa(client.chTMP+1)}, client.ControlTrack(i2.Control), false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -185,10 +186,10 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 				client.Println("SDP Video Codec Type Not Supported", i2.Type)
 			}
 			client.videoIDX = int8(len(client.CodecData) - 1)
-			client.videoID = ch
+			client.videoID = client.chTMP
 		}
 		if i2.AVType == AUDIO {
-			client.audioID = ch
+			client.audioID = client.chTMP
 			var CodecData av.AudioCodecData
 			switch i2.Type {
 			case av.AAC:
@@ -225,7 +226,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 				}
 			}
 		}
-		ch += 2
+		client.chTMP += 2
 	}
 	//test := map[string]string{"Scale": "1.000000", "Speed": "1.000000", "Range": "clock=20210929T210000Z-20210929T211000Z"}
 	err = client.request(PLAY, nil, client.control, false, false)
@@ -468,6 +469,26 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 				builder.Write(client.SDPRaw)
 				_, client.mediaSDP = sdp.Parse(string(client.SDPRaw))
 			}
+		}
+		if method == SETUP {
+			//deep := stringInBetween(builder.String(), "interleaved=", ";")
+			if val, ok := res["Transport"]; ok {
+				splits2 := strings.Split(val, ";")
+				for _, vs := range splits2 {
+					if strings.Contains(vs, "interleaved") {
+						splits3 := strings.Split(vs, "=")
+						if len(splits3) == 2 {
+							splits4 := strings.Split(splits3[1], "-")
+							if len(splits4) == 2 {
+								if val, err := strconv.Atoi(splits4[0]); err == nil {
+									client.chTMP = val
+								}
+							}
+						}
+					}
+				}
+			}
+
 		}
 		client.Println(builder.String())
 	}
