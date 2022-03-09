@@ -12,6 +12,7 @@ import (
 	"html"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -582,6 +583,14 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	case client.videoID:
 		if client.PreVideoTS == 0 {
 			client.PreVideoTS = timestamp
+		}
+		if timestamp-client.PreVideoTS < 0 {
+			//var ui32 uint64 = math.MaxUint32
+			if math.MaxUint32-client.PreVideoTS < 90*100 { //100 ms
+				client.PreVideoTS = math.MaxUint32 - client.PreVideoTS
+			} else {
+				client.PreVideoTS = 0
+			}
 		}
 		if client.PreSequenceNumber != 0 && SequenceNumber-client.PreSequenceNumber != 1 {
 			client.Println("drop packet", SequenceNumber-1)
