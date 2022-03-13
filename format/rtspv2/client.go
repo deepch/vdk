@@ -585,7 +585,6 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 			client.PreVideoTS = timestamp
 		}
 		if timestamp-client.PreVideoTS < 0 {
-			//var ui32 uint64 = math.MaxUint32
 			if math.MaxUint32-client.PreVideoTS < 90*100 { //100 ms
 				client.PreVideoTS = 0
 				client.PreVideoTS -= (math.MaxUint32 - client.PreVideoTS)
@@ -715,7 +714,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						}
 					}
 				default:
-					//client.Println("Unsupported NAL Type", naluType)
+					client.Println("Unsupported NAL Type", naluType)
 				}
 			}
 		}
