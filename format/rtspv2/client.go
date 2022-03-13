@@ -670,7 +670,30 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 				case naluType == 8:
 					client.CodecUpdatePPS(nal)
 				case naluType == 24:
-					client.Println("24 Type need add next version report https://github.com/deepch/vdk")
+					packet := nal[1:]
+					for len(packet) >= 2 {
+						size := int(packet[0])<<8 | int(packet[1])
+						if size+2 > len(packet) {
+							break
+						}
+						naluTypefs := packet[2] & 0x1f
+						switch {
+						case naluTypefs >= 1 && naluTypefs <= 5:
+							retmap = append(retmap, &av.Packet{
+								Data:            append(binSize(len(packet[2:size+2])), packet[2:size+2]...),
+								CompositionTime: time.Duration(1) * time.Millisecond,
+								Idx:             client.videoIDX,
+								IsKeyFrame:      naluType == 5,
+								Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
+								Time:            time.Duration(timestamp/90) * time.Millisecond,
+							})
+						case naluTypefs == 7:
+							client.CodecUpdateSPS(packet[2 : size+2])
+						case naluTypefs == 8:
+							client.CodecUpdatePPS(packet[2 : size+2])
+						}
+						packet = packet[size+2:]
+					}
 				case naluType == 28:
 					fuIndicator := content[offset]
 					fuHeader := content[offset+1]
