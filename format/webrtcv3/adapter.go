@@ -226,7 +226,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 					codec := tmp.codec.(h264parser.CodecData)
 					err = tmp.track.WriteSample(media.Sample{Data: append([]byte{0, 0, 0, 1}, bytes.Join([][]byte{codec.SPS(), codec.PPS(), nalu}, []byte{0, 0, 0, 1})...), Duration: pkt.Duration})
 
-				} else {
+				} else if naltype == 1 {
 					err = tmp.track.WriteSample(media.Sample{Data: append([]byte{0, 0, 0, 1}, nalu...), Duration: pkt.Duration})
 				}
 				if err != nil {
