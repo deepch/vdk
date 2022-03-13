@@ -308,6 +308,27 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 	}
 	return got, buf, err
 }
+
+func (element *Muxer) WritePacketPrepush(pkt av.Packet, dur time.Duration, GOP bool) (bool, []byte, error) {
+	stream := element.streams[pkt.Idx]
+	if GOP {
+
+		got, buf, err := stream.writePacketV3(pkt, dur, 0)
+		stream.lastpkt = &pkt
+		if err != nil {
+			return false, []byte{}, err
+		}
+		return got, buf, err
+	}
+
+	got, buf, err := stream.writePacketV2(pkt, dur, 0)
+	stream.lastpkt = &pkt
+	if err != nil {
+		return false, []byte{}, err
+	}
+	return got, buf, err
+}
+
 func (element *Muxer) WritePacket4(pkt av.Packet) error {
 	stream := element.streams[pkt.Idx]
 	return stream.writePacketV4(pkt)
