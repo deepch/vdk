@@ -225,6 +225,7 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 				if naltype == 5 {
 					codec := tmp.codec.(h264parser.CodecData)
 					err = tmp.track.WriteSample(media.Sample{Data: append([]byte{0, 0, 0, 1}, bytes.Join([][]byte{codec.SPS(), codec.PPS(), nalu}, []byte{0, 0, 0, 1})...), Duration: pkt.Duration})
+
 				} else {
 					err = tmp.track.WriteSample(media.Sample{Data: append([]byte{0, 0, 0, 1}, nalu...), Duration: pkt.Duration})
 				}
@@ -235,12 +236,13 @@ func (element *Muxer) WritePacket(pkt av.Packet) (err error) {
 			WritePacketSuccess = true
 			return
 			/*
-				codec := tmp.codec.(h264parser.CodecData)
+
 				if pkt.IsKeyFrame {
 					pkt.Data = append([]byte{0, 0, 0, 1}, bytes.Join([][]byte{codec.SPS(), codec.PPS(), pkt.Data[4:]}, []byte{0, 0, 0, 1})...)
 				} else {
 					pkt.Data = pkt.Data[4:]
 				}
+
 			*/
 		case av.PCM_ALAW:
 		case av.OPUS:
