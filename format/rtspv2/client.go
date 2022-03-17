@@ -932,7 +932,9 @@ func (client *RTSPClient) CodecUpdateVPS(val []byte) {
 	} else {
 		client.CodecData = append(client.CodecData, codecData)
 	}
+
 	client.Signals <- SignalCodecUpdate
+
 }
 
 //Println mini logging functions
