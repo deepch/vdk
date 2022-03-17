@@ -549,13 +549,15 @@ func stringInBetween(str string, start string, end string) (result string) {
 }
 
 func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
+
 	content := *payloadRAW
 	firstByte := content[4]
 	padding := (firstByte>>5)&1 == 1
 	extension := (firstByte>>4)&1 == 1
 	CSRCCnt := int(firstByte & 0x0f)
 	SequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
-	timestamp := int64(binary.BigEndian.Uint32(content[8:12]))
+	timestamp := int64(binary.BigEndian.Uint32(content[8:16]))
+
 	offset := RTPHeaderSize
 
 	end := len(content)
