@@ -173,6 +173,9 @@ func (self *Demuxer) readTSPacket() (err error) {
 	} else {
 		for _, stream := range self.streams {
 			if pid == stream.pid {
+				if stream.streamType == tsio.ElementaryStreamTypeAdtsAAC {
+					iskeyframe = false
+				}
 				if err = stream.handleTSPacket(start, iskeyframe, payload); err != nil {
 					return
 				}
@@ -187,9 +190,18 @@ func (self *Demuxer) readTSPacket() (err error) {
 func (self *Stream) addPacket(payload []byte, timedelta time.Duration) {
 	dts := self.dts
 	pts := self.pts
+
 	if dts == 0 {
 		dts = pts
 	}
+
+	dur := time.Duration(0)
+
+	if self.pt > 0 {
+		dur = dts + timedelta - self.pt
+	}
+
+	self.pt = dts + timedelta
 
 	demuxer := self.demuxer
 	pkt := av.Packet{
@@ -197,6 +209,7 @@ func (self *Stream) addPacket(payload []byte, timedelta time.Duration) {
 		IsKeyFrame: self.iskeyframe,
 		Time:       dts + timedelta,
 		Data:       payload,
+		Duration:   dur,
 	}
 	if pts != dts {
 		pkt.CompositionTime = pts - dts
