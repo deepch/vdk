@@ -8,6 +8,7 @@ import (
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/utils/bits"
 	"github.com/deepch/vdk/utils/bits/pio"
+	"time"
 )
 
 const (
@@ -676,6 +677,26 @@ func (self CodecData) Width() int {
 
 func (self CodecData) Height() int {
 	return int(self.SPSInfo.Height)
+}
+
+func (self CodecData) FPS() int {
+	return int(self.SPSInfo.FPS)
+}
+
+func (self CodecData) Resolution() string {
+	return fmt.Sprintf("%vx%v", self.Width(), self.Height())
+}
+
+func (self CodecData) Tag() string {
+	return fmt.Sprintf("avc1.%02X%02X%02X", self.RecordInfo.AVCProfileIndication, self.RecordInfo.ProfileCompatibility, self.RecordInfo.AVCLevelIndication)
+}
+
+func (self CodecData) Bandwidth() string {
+	return fmt.Sprintf("%v", (int(float64(self.Width())*(float64(1.71)*(30/float64(self.FPS())))))*1000)
+}
+
+func (self CodecData) PacketDuration(data []byte) time.Duration {
+	return time.Duration(1000./float64(self.FPS())) * time.Millisecond
 }
 
 func NewCodecDataFromAVCDecoderConfRecord(record []byte) (self CodecData, err error) {

@@ -290,6 +290,10 @@ func (self CodecData) SampleFormat() av.SampleFormat {
 	return av.FLTP
 }
 
+func (self CodecData) Tag() string {
+	return fmt.Sprintf("mp4a.40.%d", self.Config.ObjectType)
+}
+
 func (self CodecData) PacketDuration(data []byte) (dur time.Duration, err error) {
 	dur = time.Duration(1024) * time.Second / time.Duration(self.Config.SampleRate)
 	return
