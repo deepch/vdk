@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"math"
 
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/utils/bits"
 	"github.com/deepch/vdk/utils/bits/pio"
-	"time"
 )
 
 const (

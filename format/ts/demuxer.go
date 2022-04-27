@@ -22,8 +22,8 @@ type Demuxer struct {
 	pmt     *tsio.PMT
 	streams []*Stream
 	tshdr   []byte
-
-	stage int
+	AnnexB  bool
+	stage   int
 }
 
 func NewDemuxer(r io.Reader) *Demuxer {
@@ -252,6 +252,7 @@ func (self *Stream) payloadEnd() (n int, err error) {
 	case tsio.ElementaryStreamTypeH264:
 		nalus, _ := h264parser.SplitNALUs(payload)
 		var sps, pps []byte
+
 		for _, nalu := range nalus {
 			if len(nalu) > 0 {
 				naltype := nalu[0] & 0x1f
@@ -262,13 +263,23 @@ func (self *Stream) payloadEnd() (n int, err error) {
 					pps = nalu
 				case h264parser.IsDataNALU(nalu):
 					// raw nalu to avcc
-					b := make([]byte, 4+len(nalu))
-					pio.PutU32BE(b[0:4], uint32(len(nalu)))
-					copy(b[4:], nalu)
-					self.addPacket(b, time.Duration(0))
-					n++
+					if !self.demuxer.AnnexB {
+						b := make([]byte, 4+len(nalu))
+						pio.PutU32BE(b[0:4], uint32(len(nalu)))
+						copy(b[4:], nalu)
+						self.addPacket(b, time.Duration(0))
+						n++
+					}
 				}
 			}
+		}
+
+		if self.demuxer.AnnexB {
+			b := make([]byte, 4+len(payload))
+			pio.PutU32BE(b[0:4], uint32(len(payload)))
+			copy(b[4:], payload)
+			self.addPacket(b, time.Duration(0))
+			n++
 		}
 
 		if self.CodecData == nil && len(sps) > 0 && len(pps) > 0 {
