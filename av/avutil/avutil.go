@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/deepch/vdk/av"
+	"github.com/deepch/vdk/codec/aacparser"
+	"github.com/deepch/vdk/codec/h264parser"
 )
 
 type HandlerDemuxer struct {
@@ -309,4 +311,32 @@ func CopyFile(dst av.Muxer, src av.Demuxer) (err error) {
 		return
 	}
 	return
+}
+
+func Equal(c1 []av.CodecData, c2 []av.CodecData) bool {
+	if len(c1) != len(c2) {
+		return false
+	}
+	for i, codec := range c1 {
+		if codec.Type() != c2[i].Type() {
+			return false
+		}
+		switch codec.Type() {
+		case av.H264:
+			if eq := bytes.Compare(
+				codec.(h264parser.CodecData).AVCDecoderConfRecordBytes(),
+				c2[i].(h264parser.CodecData).AVCDecoderConfRecordBytes(),
+			); eq == 0 {
+				return false
+			}
+		case av.AAC:
+			if eq := bytes.Compare(
+				codec.(aacparser.CodecData).MPEG4AudioConfigBytes(),
+				c2[i].(aacparser.CodecData).MPEG4AudioConfigBytes(),
+			); eq != 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
