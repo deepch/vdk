@@ -326,7 +326,7 @@ func Equal(c1 []av.CodecData, c2 []av.CodecData) bool {
 			if eq := bytes.Compare(
 				codec.(h264parser.CodecData).AVCDecoderConfRecordBytes(),
 				c2[i].(h264parser.CodecData).AVCDecoderConfRecordBytes(),
-			); eq == 0 {
+			); eq != 0 {
 				return false
 			}
 		case av.AAC:
