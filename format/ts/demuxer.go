@@ -3,14 +3,13 @@ package ts
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"time"
-
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/ts/tsio"
 	"github.com/deepch/vdk/utils/bits/pio"
+	"io"
+	"time"
 )
 
 type Demuxer struct {
@@ -187,7 +186,7 @@ func (self *Demuxer) readTSPacket() (err error) {
 	return
 }
 
-func (self *Stream) addPacket(payload []byte, timedelta time.Duration) {
+func (self *Stream) addPacket(payload []byte, timedelta time.Duration, fixed time.Duration) {
 	dts := self.dts
 	pts := self.pts
 
@@ -199,6 +198,8 @@ func (self *Stream) addPacket(payload []byte, timedelta time.Duration) {
 
 	if self.pt > 0 {
 		dur = dts + timedelta - self.pt
+	} else {
+		dur = fixed
 	}
 
 	self.pt = dts + timedelta
@@ -243,7 +244,7 @@ func (self *Stream) payloadEnd() (n int, err error) {
 					return
 				}
 			}
-			self.addPacket(payload[hdrlen:framelen], delta)
+			self.addPacket(payload[hdrlen:framelen], delta, time.Duration(samples)*time.Second/time.Duration(config.SampleRate))
 			n++
 			delta += time.Duration(samples) * time.Second / time.Duration(config.SampleRate)
 			payload = payload[framelen:]
@@ -259,6 +260,10 @@ func (self *Stream) payloadEnd() (n int, err error) {
 				switch {
 				case naltype == 7:
 					sps = nalu
+					info, err := h264parser.ParseSPS(sps)
+					if err == nil {
+						self.fps = info.FPS
+					}
 				case naltype == 8:
 					pps = nalu
 				case h264parser.IsDataNALU(nalu):
@@ -267,7 +272,7 @@ func (self *Stream) payloadEnd() (n int, err error) {
 						b := make([]byte, 4+len(nalu))
 						pio.PutU32BE(b[0:4], uint32(len(nalu)))
 						copy(b[4:], nalu)
-						self.addPacket(b, time.Duration(0))
+						self.addPacket(b, time.Duration(0), (1000*time.Millisecond)/time.Duration(self.fps))
 						n++
 					}
 				}
@@ -278,7 +283,7 @@ func (self *Stream) payloadEnd() (n int, err error) {
 			b := make([]byte, 4+len(payload))
 			pio.PutU32BE(b[0:4], uint32(len(payload)))
 			copy(b[4:], payload)
-			self.addPacket(b, time.Duration(0))
+			self.addPacket(b, time.Duration(0), 0)
 			n++
 		}
 
