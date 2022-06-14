@@ -121,6 +121,7 @@ var (
 	VP8        = MakeVideoCodecType(avCodecTypeMagic + 4)
 	VP9        = MakeVideoCodecType(avCodecTypeMagic + 5)
 	AV1        = MakeVideoCodecType(avCodecTypeMagic + 6)
+	MJPEG      = MakeVideoCodecType(avCodecTypeMagic + 7)
 	AAC        = MakeAudioCodecType(avCodecTypeMagic + 1)
 	PCM_MULAW  = MakeAudioCodecType(avCodecTypeMagic + 2)
 	PCM_ALAW   = MakeAudioCodecType(avCodecTypeMagic + 3)

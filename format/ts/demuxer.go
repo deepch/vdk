@@ -3,13 +3,15 @@ package ts
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/codec/mjpeg"
 	"github.com/deepch/vdk/format/ts/tsio"
 	"github.com/deepch/vdk/utils/bits/pio"
-	"io"
-	"time"
 )
 
 type Demuxer struct {
@@ -116,6 +118,8 @@ func (self *Demuxer) initPMT(payload []byte) (err error) {
 		case tsio.ElementaryStreamTypeH264:
 			self.streams = append(self.streams, stream)
 		case tsio.ElementaryStreamTypeAdtsAAC:
+			self.streams = append(self.streams, stream)
+		case tsio.ElementaryStreamTypeAlignmentDescriptor:
 			self.streams = append(self.streams, stream)
 		}
 	}
@@ -228,8 +232,16 @@ func (self *Stream) payloadEnd() (n int, err error) {
 		return
 	}
 	self.data = nil
-
 	switch self.streamType {
+	case tsio.ElementaryStreamTypeAlignmentDescriptor:
+		if self.CodecData == nil {
+			self.CodecData = mjpeg.CodecData{}
+		}
+		b := make([]byte, 4+len(payload))
+		pio.PutU32BE(b[0:4], uint32(len(payload)))
+		copy(b[4:], payload)
+		self.addPacket(b, time.Duration(0), 0)
+		n++
 	case tsio.ElementaryStreamTypeAdtsAAC:
 		var config aacparser.MPEG4AudioConfig
 

@@ -33,8 +33,9 @@ var ErrParsePMT = fmt.Errorf("invalid PMT")
 var ErrParsePAT = fmt.Errorf("invalid PAT")
 
 const (
-	ElementaryStreamTypeH264    = 0x1B
-	ElementaryStreamTypeAdtsAAC = 0x0F
+	ElementaryStreamTypeH264                = 0x1B
+	ElementaryStreamTypeAdtsAAC             = 0x0F
+	ElementaryStreamTypeAlignmentDescriptor = 0x06
 )
 
 type PATEntry struct {
