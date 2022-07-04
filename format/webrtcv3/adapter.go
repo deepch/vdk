@@ -65,6 +65,10 @@ func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*we
 			Credential:     element.Options.ICECredential,
 			CredentialType: webrtc.ICECredentialTypePassword,
 		})
+	} else {
+		configuration.ICEServers = append(configuration.ICEServers, webrtc.ICEServer{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		})
 	}
 	m := &webrtc.MediaEngine{}
 	if err := m.RegisterDefaultCodecs(); err != nil {
@@ -118,13 +122,22 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 		if i2.Type().IsVideo() {
 			if i2.Type() == av.H264 {
 				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
-					MimeType: "video/h264",
-				}, "pion-rtsp-video", "pion-rtsp-video")
+					MimeType: webrtc.MimeTypeH264,
+				}, "pion-rtsp-video", "pion-video")
 				if err != nil {
 					return "", err
 				}
-				if _, err = peerConnection.AddTrack(track); err != nil {
+				if rtpSender, err := peerConnection.AddTrack(track); err != nil {
 					return "", err
+				} else {
+					go func() {
+						rtcpBuf := make([]byte, 1500)
+						for {
+							if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
+								return
+							}
+						}
+					}()
 				}
 			}
 		} else if i2.Type().IsAudio() {
@@ -148,8 +161,17 @@ func (element *Muxer) WriteHeader(streams []av.CodecData, sdp64 string) (string,
 			if err != nil {
 				return "", err
 			}
-			if _, err = peerConnection.AddTrack(track); err != nil {
+			if rtpSender, err := peerConnection.AddTrack(track); err != nil {
 				return "", err
+			} else {
+				go func() {
+					rtcpBuf := make([]byte, 1500)
+					for {
+						if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
+							return
+						}
+					}
+				}()
 			}
 		}
 		element.streams[int8(i)] = &Stream{track: track, codec: i2}
