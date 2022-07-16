@@ -67,11 +67,16 @@ func (self *Muxer) newStream(idx int, codec av.CodecData) (err error) {
 	return
 }
 
-func (self *Muxer) writePaddingTSPackets(tsw *tsio.TSWriter) (err error) {
-	for tsw.ContinuityCounter&0xf != 0x0 {
-		if err = tsw.WritePackets(self.w, self.datav[:1], 0, false, true); err != nil {
+func (self *Muxer) writePaddingTSPackets(streamW *Stream) (err error) {
+	for streamW.tsw.ContinuityCounter&0xf != 0x0 {
+		header := tsio.TSHeader{
+			PID:               uint(streamW.pid),
+			ContinuityCounter: streamW.tsw.ContinuityCounter,
+		}
+		if _, err = tsio.WriteTSHeader(self.w, header, 0); err != nil {
 			return
 		}
+		streamW.tsw.ContinuityCounter++
 	}
 	return
 }
@@ -79,7 +84,7 @@ func (self *Muxer) writePaddingTSPackets(tsw *tsio.TSWriter) (err error) {
 func (self *Muxer) WriteTrailer() (err error) {
 	if self.PaddingToMakeCounterCont {
 		for _, stream := range self.streams {
-			if err = self.writePaddingTSPackets(stream.tsw); err != nil {
+			if err = self.writePaddingTSPackets(stream); err != nil {
 				return
 			}
 		}
