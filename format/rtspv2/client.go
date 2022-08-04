@@ -38,8 +38,11 @@ const (
 )
 
 const (
-	RTPHeaderSize = 12
+	RTPHeaderSize      = 12
+	RTCPSenderReport   = 200
+	RTCPReceiverReport = 201
 )
+
 const (
 	DESCRIBE = "DESCRIBE"
 	OPTIONS  = "OPTIONS"
@@ -558,6 +561,11 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	SequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
 	timestamp := int64(binary.BigEndian.Uint32(content[8:16]))
 
+	if isRTCPPacket(content) {
+		client.Println("skipping RTCP packet")
+		return nil, false
+	}
+
 	offset := RTPHeaderSize
 
 	end := len(content)
@@ -949,4 +957,9 @@ func binSize(val int) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(val))
 	return buf
+}
+
+func isRTCPPacket(content []byte) bool {
+	rtcpPacketType := content[5]
+	return rtcpPacketType == RTCPSenderReport || rtcpPacketType == RTCPReceiverReport
 }
