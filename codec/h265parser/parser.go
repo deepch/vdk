@@ -537,51 +537,12 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 	self.ProfileCompatibility = b[2]
 	self.AVCLevelIndication = b[3]
 	self.LengthSizeMinusOne = b[4] & 0x03
-	spscount := int(b[5] & 0x1f)
-	n += 6
-	for i := 0; i < spscount; i++ {
-		if len(b) < n+2 {
-			err = ErrDecconfInvalid
-			return
-		}
-		spslen := int(pio.U16BE(b[n:]))
-		n += 2
 
-		if len(b) < n+spslen {
-			err = ErrDecconfInvalid
-			return
-		}
-		self.SPS = append(self.SPS, b[n:n+spslen])
-		n += spslen
-	}
+	n = 23
 
-	if len(b) < n+1 {
-		err = ErrDecconfInvalid
-		return
-	}
-
-	ppscount := int(b[n])
+	n += 2
+	vpscount := int(b[n] & 0x1f)
 	n++
-
-	for i := 0; i < ppscount; i++ {
-		if len(b) < n+2 {
-			err = ErrDecconfInvalid
-			return
-		}
-		ppslen := int(pio.U16BE(b[n:]))
-		n += 2
-
-		if len(b) < n+ppslen {
-			err = ErrDecconfInvalid
-			return
-		}
-		self.PPS = append(self.PPS, b[n:n+ppslen])
-		n += ppslen
-	}
-
-	vpscount := int(b[n])
-	n++
-
 	for i := 0; i < vpscount; i++ {
 		if len(b) < n+2 {
 			err = ErrDecconfInvalid
@@ -597,6 +558,48 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 		self.VPS = append(self.VPS, b[n:n+vpslen])
 		n += vpslen
 	}
+
+	n += 2
+	spscount := int(b[n] & 0x1f)
+	n++
+	for i := 0; i < spscount; i++ {
+		if len(b) < n+2 {
+			err = ErrDecconfInvalid
+			return
+		}
+		spslen := int(pio.U16BE(b[n:]))
+		n += 2
+
+		if len(b) < n+spslen {
+			err = ErrDecconfInvalid
+			return
+		}
+		self.SPS = append(self.SPS, b[n:n+spslen])
+		n += spslen
+	}
+	if len(b) < n+1 {
+		err = ErrDecconfInvalid
+		return
+	}
+
+	n += 2
+	ppscount := int(b[n] & 0x1f)
+	n++
+	for i := 0; i < ppscount; i++ {
+		if len(b) < n+2 {
+			err = ErrDecconfInvalid
+			return
+		}
+		ppslen := int(pio.U16BE(b[n:]))
+		n += 2
+		if len(b) < n+ppslen {
+			err = ErrDecconfInvalid
+			return
+		}
+		self.PPS = append(self.PPS, b[n:n+ppslen])
+		n += ppslen
+	}
+
 	return
 }
 
