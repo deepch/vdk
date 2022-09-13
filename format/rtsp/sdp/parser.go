@@ -160,6 +160,9 @@ func Parse(content string) (sess Session, medias []Media) {
 									case "sprop-parameter-sets":
 										fields := strings.Split(val, ",")
 										for _, field := range fields {
+											if field == "" {
+												continue
+											}
 											val, _ := base64.StdEncoding.DecodeString(field)
 											media.SpropParameterSets = append(media.SpropParameterSets, val)
 										}
