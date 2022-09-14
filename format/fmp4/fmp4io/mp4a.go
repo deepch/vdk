@@ -1,8 +1,8 @@
 package fmp4io
 
 import (
-	"github.com/deepch/vdk/format/fmp4/esio"
-	"github.com/deepch/vdk/utils/bits/pio"
+	"github.com/honuworx/vdk/format/fmp4/esio"
+	"github.com/honuworx/vdk/utils/bits/pio"
 )
 
 const MP4A = Tag(0x6d703461)

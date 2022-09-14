@@ -1,6 +1,6 @@
 package mjpeg
 
-import "github.com/deepch/vdk/av"
+import "github.com/honuworx/vdk/av"
 
 type CodecData struct {
 }

@@ -1,11 +1,11 @@
 package fmp4
 
 import (
-	"github.com/deepch/vdk/av"
-	"github.com/deepch/vdk/format/fmp4/fmp4io"
-	"github.com/deepch/vdk/format/fmp4/fragment"
-	"github.com/deepch/vdk/format/fmp4/timescale"
-	"github.com/deepch/vdk/utils/bits/pio"
+	"github.com/honuworx/vdk/av"
+	"github.com/honuworx/vdk/format/fmp4/fmp4io"
+	"github.com/honuworx/vdk/format/fmp4/fragment"
+	"github.com/honuworx/vdk/format/fmp4/timescale"
+	"github.com/honuworx/vdk/utils/bits/pio"
 )
 
 type fragmentWithData struct {

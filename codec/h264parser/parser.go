@@ -7,9 +7,9 @@ import (
 
 	"time"
 
-	"github.com/deepch/vdk/av"
-	"github.com/deepch/vdk/utils/bits"
-	"github.com/deepch/vdk/utils/bits/pio"
+	"github.com/honuworx/vdk/av"
+	"github.com/honuworx/vdk/utils/bits"
+	"github.com/honuworx/vdk/utils/bits/pio"
 )
 
 const (

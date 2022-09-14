@@ -3,7 +3,7 @@ package fmp4io
 import (
 	"fmt"
 
-	"github.com/deepch/vdk/utils/bits/pio"
+	"github.com/honuworx/vdk/utils/bits/pio"
 )
 
 const STBL = Tag(0x7374626c)
