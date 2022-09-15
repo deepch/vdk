@@ -258,7 +258,8 @@ func (client *RTSPClient) startStream() {
 	timer := time.Now()
 	oneb := make([]byte, 1)
 	header := make([]byte, 4)
-	var fixed bool
+	first := make([]byte, 2)
+	failed := 0
 	for {
 		err := client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 		if err != nil {
@@ -273,19 +274,36 @@ func (client *RTSPClient) startStream() {
 			}
 			timer = time.Now()
 		}
-		if !fixed {
-			nb, err := io.ReadFull(client.connRW, header)
-			if err != nil || nb != 4 {
+
+		first[0] = 0x00
+		first[1] = 0x00 //TODO: Find a way to inject an expected channel identifier
+		for !(first[0] == 0x24 || first[0] == 0x52) || first[1] != 0x0 {
+			nb, err := io.ReadFull(client.connRW, first)
+			if err != nil || nb != 2 {
 				client.Println("RTSP Client RTP Read Header", err)
 				return
 			}
+			client.Println("Searching for 0x24 or 0x52 headers: ", first)
 		}
-		fixed = false
+
+		header[0] = first[0]
+		header[1] = first[1]
+
+		nb, err := io.ReadFull(client.connRW, header[2:])
+		if err != nil || nb != 2 {
+			client.Println("RTSP Client RTP Read Header", err)
+			return
+		}
+
+		length := int32(binary.BigEndian.Uint16(header[2:]))
+		client.Println("Got frame header: ", header, length)
+
 		switch header[0] {
 		case 0x24:
+			failed = 0
 			length := int32(binary.BigEndian.Uint16(header[2:]))
 			if length > 65535 || length < 12 {
-				client.Println("RTSP Client RTP Incorrect Packet Size")
+				client.Println("RTSP Client RTP Incorrect Packet Size: ", length)
 				return
 			}
 			content := make([]byte, length+4)
@@ -321,6 +339,7 @@ func (client *RTSPClient) startStream() {
 				client.OutgoingPacketQueue <- i2
 			}
 		case 0x52:
+			failed = 0
 			var responseTmp []byte
 			for {
 				n, rerr := io.ReadFull(client.connRW, oneb)
@@ -347,8 +366,12 @@ func (client *RTSPClient) startStream() {
 				}
 			}
 		default:
-			client.Println("RTSP Client RTP Read DeSync")
-			return
+			failed = failed + 1
+			client.Println("RTSP Client RTP Read DeSync: Failed frames", failed)
+
+			if failed > 500 {
+				return
+			}
 		}
 	}
 }
@@ -747,7 +770,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						}
 					}
 				default:
-					client.Println("Unsupported NAL Type", naluType)
+					//client.Println("Unsupported NAL Type", naluType)
 				}
 			}
 		}
