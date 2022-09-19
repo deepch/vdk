@@ -25,6 +25,7 @@ import (
 	"github.com/honuworx/vdk/codec/h264parser"
 	"github.com/honuworx/vdk/codec/h265parser"
 	"github.com/honuworx/vdk/format/rtsp/sdp"
+	"github.com/pion/rtcp"
 )
 
 const (
@@ -260,6 +261,8 @@ func (client *RTSPClient) startStream() {
 	header := make([]byte, 4)
 	first := make([]byte, 2)
 	failed := 0
+	var ssrc uint32
+	ssrc = 0
 	for {
 		err := client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 		if err != nil {
@@ -272,6 +275,10 @@ func (client *RTSPClient) startStream() {
 				client.Println("RTSP Client RTP keep-alive", err)
 				return
 			}
+
+			if ssrc != 0 {
+				client.sendRR(ssrc)
+			}
 			timer = time.Now()
 		}
 
@@ -283,7 +290,6 @@ func (client *RTSPClient) startStream() {
 				client.Println("RTSP Client RTP Read Header", err)
 				return
 			}
-			client.Println("Searching for 0x24 or 0x52 headers: ", first)
 		}
 
 		header[0] = first[0]
@@ -294,9 +300,6 @@ func (client *RTSPClient) startStream() {
 			client.Println("RTSP Client RTP Read Header", err)
 			return
 		}
-
-		length := int32(binary.BigEndian.Uint16(header[2:]))
-		client.Println("Got frame header: ", header, length)
 
 		switch header[0] {
 		case 0x24:
@@ -326,7 +329,8 @@ func (client *RTSPClient) startStream() {
 					return
 				}
 			}
-			pkt, got := client.RTPDemuxer(&content)
+			pkt, got, _ssrc := client.RTPDemuxer(&content)
+			ssrc = _ssrc
 			if !got {
 				continue
 			}
@@ -369,11 +373,51 @@ func (client *RTSPClient) startStream() {
 			failed = failed + 1
 			client.Println("RTSP Client RTP Read DeSync: Failed frames", failed)
 
+			ssrc = 0
+
 			if failed > 500 {
 				return
 			}
 		}
 	}
+}
+
+func (client *RTSPClient) sendRR(ssrc uint32) (err error) {
+	client.Println("Sending ReceiverReport", ssrc)
+	err = client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
+	if err != nil {
+		return
+	}
+	client.seq++
+
+	rr := rtcp.ReceiverReport{}
+	recepReport := rtcp.ReceptionReport{}
+
+	rr.SSRC = ssrc
+
+	recepReport.SSRC = ssrc
+	recepReport.FractionLost = 0
+	recepReport.TotalLost = 0
+	recepReport.LastSequenceNumber = 0
+	recepReport.Jitter = 0
+	recepReport.LastSenderReport = 0
+	recepReport.Delay = 0
+
+	rr.Reports = append(rr.Reports, recepReport)
+
+	data, err := rr.Marshal()
+
+	if err != nil {
+		return
+	}
+
+	nb, err := client.connRW.Write(data)
+
+	if err != nil || nb == 0 {
+		return
+	}
+
+	return
 }
 
 func (client *RTSPClient) request(method string, customHeaders map[string]string, uri string, one bool, nores bool) (err error) {
@@ -574,19 +618,28 @@ func stringInBetween(str string, start string, end string) (result string) {
 	return str
 }
 
-func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
-
+func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool, uint32) {
 	content := *payloadRAW
 	firstByte := content[4]
 	padding := (firstByte>>5)&1 == 1
 	extension := (firstByte>>4)&1 == 1
 	CSRCCnt := int(firstByte & 0x0f)
 	SequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
-	timestamp := int64(binary.BigEndian.Uint32(content[8:16]))
+	timestamp := int64(binary.BigEndian.Uint32(content[8:12]))
+	ssrc := uint32(binary.BigEndian.Uint32(content[12:16]))
 
 	if isRTCPPacket(content) {
-		client.Println("skipping RTCP packet")
-		return nil, false
+		client.Println("Processing RTCP packet")
+		rtcpPacketType := content[5]
+		if rtcpPacketType == RTCPSenderReport {
+			srr := rtcp.SenderReport{}
+			srr.Unmarshal(content)
+
+			client.Println(srr)
+		} else {
+			client.Println("skipping RTCP packet")
+		}
+		return nil, false, 0
 	}
 
 	offset := RTPHeaderSize
@@ -596,7 +649,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		offset += 4 * CSRCCnt
 	}
 	if extension && len(content) < 4+offset+2+2 {
-		return nil, false
+		return nil, false, 0
 	}
 	if extension && end-offset >= 4 {
 		extLen := 4 * int(binary.BigEndian.Uint16(content[4+offset+2:]))
@@ -636,7 +689,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		}
 		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
 		if len(nalRaw) == 0 || len(nalRaw[0]) == 0 {
-			return nil, false
+			return nil, false, 0
 		}
 		var retmap []*av.Packet
 		for _, nal := range nalRaw {
@@ -776,7 +829,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		}
 		if len(retmap) > 0 {
 			client.PreVideoTS = timestamp
-			return retmap, true
+			return retmap, true, ssrc
 		}
 	case client.audioID:
 		if client.PreAudioTS == 0 {
@@ -850,12 +903,12 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		}
 		if len(retmap) > 0 {
 			client.PreAudioTS = timestamp
-			return retmap, true
+			return retmap, true, ssrc
 		}
 	default:
 		//client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
 	}
-	return nil, false
+	return nil, false, ssrc
 }
 
 func (client *RTSPClient) CodecUpdateSPS(val []byte) {
