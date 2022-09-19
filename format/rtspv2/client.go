@@ -281,9 +281,7 @@ func (client *RTSPClient) startStream() {
 				return
 			}
 
-			if metaData.SSRC != 0 {
-				client.sendRR(metaData)
-			}
+			client.sendRR(metaData)
 			timer = time.Now()
 		}
 
@@ -392,6 +390,7 @@ func (client *RTSPClient) sendRR(metaData RTPMetadata) (err error) {
 	client.Println("Sending ReceiverReport", metaData)
 	err = client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 	if err != nil {
+		client.Println("Error setting connection timeout: ", err)
 		return
 	}
 	client.seq++
@@ -414,12 +413,20 @@ func (client *RTSPClient) sendRR(metaData RTPMetadata) (err error) {
 	data, err := rr.Marshal()
 
 	if err != nil {
+		client.Println("Error marshalling receiver report: ", err)
 		return
 	}
 
 	nb, err := client.connRW.Write(data)
 
 	if err != nil || nb == 0 {
+		client.Println("Error sending receiver report: ", err)
+		return
+	}
+
+	err = client.connRW.Flush()
+	if err != nil {
+		client.Println("Error flushing receiver report: ", err)
 		return
 	}
 
