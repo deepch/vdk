@@ -202,7 +202,8 @@ func (self *Stream) fillTrackAtom() (err error) {
 		self.trackAtom.Media.Info.Video = &mp4io.VideoMediaInfo{
 			Flags: 0x000001,
 		}
-		self.codecString = fmt.Sprintf("hvc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
+		//self.codecString = fmt.Sprintf("hvc1.%02X%02X%02X", codec.RecordInfo.AVCProfileIndication, codec.RecordInfo.ProfileCompatibility, codec.RecordInfo.AVCLevelIndication)
+		self.codecString = "hev1.1.6.L120.90"
 
 	} else if self.Type() == av.AAC {
 		codec := self.CodecData.(aacparser.CodecData)
@@ -439,7 +440,7 @@ func (element *Muxer) Finalize() []byte {
 
 }
 
-//PutU32BE func
+// PutU32BE func
 func PutU32BE(b []byte, v uint32) {
 	b[0] = byte(v >> 24)
 	b[1] = byte(v >> 16)
