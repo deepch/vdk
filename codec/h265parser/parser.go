@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/utils/bits"
 	"github.com/deepch/vdk/utils/bits/pio"
-	"time"
 )
 
 type SPSInfo struct {
@@ -462,7 +463,8 @@ func (self CodecData) Resolution() string {
 }
 
 func (self CodecData) Tag() string {
-	return fmt.Sprintf("hvc1.%02X%02X%02X", self.RecordInfo.AVCProfileIndication, self.RecordInfo.ProfileCompatibility, self.RecordInfo.AVCLevelIndication)
+	//return fmt.Sprintf("hvc1.%02X%02X%02X", self.RecordInfo.AVCProfileIndication, self.RecordInfo.ProfileCompatibility, self.RecordInfo.AVCLevelIndication)
+	return "hev1.1.6.L120.90"
 }
 
 func (self CodecData) Bandwidth() string {
