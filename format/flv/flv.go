@@ -228,12 +228,12 @@ func CodecDataToTag(stream av.CodecData) (_tag flvio.Tag, ok bool, err error) {
 		ok = true
 		_tag = tag
 	case av.H265:
-		h264 := stream.(h264parser.CodecData)
+		h265c := stream.(h265parser.CodecData)
 		tag := flvio.Tag{
 			Type:          flvio.TAG_VIDEO,
 			AVCPacketType: flvio.AVC_SEQHDR,
 			CodecID:       flvio.VIDEO_H265,
-			Data:          h264.AVCDecoderConfRecordBytes(),
+			Data:          h265c.AVCDecoderConfRecordBytes(),
 			FrameType:     flvio.FRAME_KEY,
 		}
 		ok = true
