@@ -59,6 +59,7 @@ const (
 	FRAME_INTER = 2
 
 	VIDEO_H264 = 7
+	VIDEO_H265 = 12
 )
 
 type Tag struct {

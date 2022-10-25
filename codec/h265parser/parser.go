@@ -531,7 +531,7 @@ type AVCDecoderConfRecord struct {
 var ErrDecconfInvalid = fmt.Errorf("h265parser: AVCDecoderConfRecord invalid")
 
 func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
-	if len(b) < 7 {
+	if len(b) < 30 {
 		err = ErrDecconfInvalid
 		return
 	}
@@ -539,8 +539,36 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 	self.ProfileCompatibility = b[2]
 	self.AVCLevelIndication = b[3]
 	self.LengthSizeMinusOne = b[4] & 0x03
-	spscount := int(b[5] & 0x1f)
-	n += 6
+
+	vpscount := int(b[25] & 0x1f)
+	n += 26
+	for i := 0; i < vpscount; i++ {
+		if len(b) < n+2 {
+			err = ErrDecconfInvalid
+			return
+		}
+		vpslen := int(pio.U16BE(b[n:]))
+		n += 2
+
+		if len(b) < n+vpslen {
+			err = ErrDecconfInvalid
+			return
+		}
+		self.VPS = append(self.VPS, b[n:n+vpslen])
+		n += vpslen
+	}
+
+	if len(b) < n+1 {
+		err = ErrDecconfInvalid
+		return
+	}
+
+	n++
+	n++
+
+	spscount := int(b[n])
+	n++
+
 	for i := 0; i < spscount; i++ {
 		if len(b) < n+2 {
 			err = ErrDecconfInvalid
@@ -557,10 +585,8 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 		n += spslen
 	}
 
-	if len(b) < n+1 {
-		err = ErrDecconfInvalid
-		return
-	}
+	n++
+	n++
 
 	ppscount := int(b[n])
 	n++
@@ -579,25 +605,6 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 		}
 		self.PPS = append(self.PPS, b[n:n+ppslen])
 		n += ppslen
-	}
-
-	vpscount := int(b[n])
-	n++
-
-	for i := 0; i < vpscount; i++ {
-		if len(b) < n+2 {
-			err = ErrDecconfInvalid
-			return
-		}
-		vpslen := int(pio.U16BE(b[n:]))
-		n += 2
-
-		if len(b) < n+vpslen {
-			err = ErrDecconfInvalid
-			return
-		}
-		self.VPS = append(self.VPS, b[n:n+vpslen])
-		n += vpslen
 	}
 	return
 }

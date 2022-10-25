@@ -11,6 +11,7 @@ import (
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/fake"
 	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/codec/h265parser"
 	"github.com/deepch/vdk/format/flv/flvio"
 	"github.com/deepch/vdk/utils/bits/pio"
 )
@@ -28,6 +29,8 @@ func NewMetadataByStreams(streams []av.CodecData) (metadata flvio.AMFMap, err er
 			switch typ {
 			case av.H264:
 				metadata["videocodecid"] = flvio.VIDEO_H264
+			case av.H265:
+				metadata["videocodecid"] = flvio.VIDEO_H265
 
 			default:
 				err = fmt.Errorf("flv: metadata: unsupported video codecType=%v", stream.Type())
@@ -87,10 +90,12 @@ func (self *Prober) PushTag(tag flvio.Tag, timestamp int32) (err error) {
 		switch tag.AVCPacketType {
 		case flvio.AVC_SEQHDR:
 			if !self.GotVideo {
-				var stream h264parser.CodecData
+				var stream av.CodecData
 				if stream, err = h264parser.NewCodecDataFromAVCDecoderConfRecord(tag.Data); err != nil {
-					err = fmt.Errorf("flv: h264 seqhdr invalid")
-					return
+					if stream, err = h265parser.NewCodecDataFromAVCDecoderConfRecord(tag.Data); err != nil {
+						err = fmt.Errorf("flv: h264 seqhdr invalid")
+						return
+					}
 				}
 				self.VideoStreamIdx = len(self.Streams)
 				self.Streams = append(self.Streams, stream)
@@ -222,7 +227,17 @@ func CodecDataToTag(stream av.CodecData) (_tag flvio.Tag, ok bool, err error) {
 		}
 		ok = true
 		_tag = tag
-
+	case av.H265:
+		h264 := stream.(h264parser.CodecData)
+		tag := flvio.Tag{
+			Type:          flvio.TAG_VIDEO,
+			AVCPacketType: flvio.AVC_SEQHDR,
+			CodecID:       flvio.VIDEO_H265,
+			Data:          h264.AVCDecoderConfRecordBytes(),
+			FrameType:     flvio.FRAME_KEY,
+		}
+		ok = true
+		_tag = tag
 	case av.NELLYMOSER:
 	case av.SPEEX:
 
@@ -272,7 +287,19 @@ func PacketToTag(pkt av.Packet, stream av.CodecData) (tag flvio.Tag, timestamp i
 		} else {
 			tag.FrameType = flvio.FRAME_INTER
 		}
-
+	case av.H265:
+		tag = flvio.Tag{
+			Type:            flvio.TAG_VIDEO,
+			AVCPacketType:   flvio.AVC_NALU,
+			CodecID:         flvio.VIDEO_H265,
+			Data:            pkt.Data,
+			CompositionTime: flvio.TimeToTs(pkt.CompositionTime),
+		}
+		if pkt.IsKeyFrame {
+			tag.FrameType = flvio.FRAME_KEY
+		} else {
+			tag.FrameType = flvio.FRAME_INTER
+		}
 	case av.AAC:
 		tag = flvio.Tag{
 			Type:          flvio.TAG_AUDIO,
@@ -336,7 +363,7 @@ func NewMuxer(w io.Writer) *Muxer {
 	return NewMuxerWriteFlusher(bufio.NewWriterSize(w, pio.RecommendBufioSize))
 }
 
-var CodecTypes = []av.CodecType{av.H264, av.AAC, av.SPEEX}
+var CodecTypes = []av.CodecType{av.H264, av.AAC, av.SPEEX, av.H265}
 
 func (self *Muxer) WriteHeader(streams []av.CodecData) (err error) {
 	var flags uint8
