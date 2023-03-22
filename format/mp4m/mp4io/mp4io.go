@@ -376,7 +376,7 @@ func (self *ElemStreamDesc) parseDescHdr(b []byte, offset int) (n int, tag uint8
 	return
 }
 
-func ReadFileAtoms(r io.ReadSeeker, name string) (atoms []Atom, err error) {
+func ReadFileAtoms(r io.ReadSeeker) (atoms []Atom, err error) {
 	for {
 		offset, _ := r.Seek(0, 1)
 		taghdr := make([]byte, 8)
