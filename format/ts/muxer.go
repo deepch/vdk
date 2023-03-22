@@ -2,6 +2,7 @@ package ts
 
 import (
 	"fmt"
+	"github.com/deepch/vdk/codec/h265parser"
 	"io"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/deepch/vdk/format/ts/tsio"
 )
 
-var CodecTypes = []av.CodecType{av.H264, av.AAC}
+var CodecTypes = []av.CodecType{av.H264, av.H265, av.AAC}
 
 type Muxer struct {
 	w       io.Writer
@@ -123,6 +124,11 @@ func (self *Muxer) WritePATPMT() (err error) {
 				StreamType:    tsio.ElementaryStreamTypeH264,
 				ElementaryPID: stream.pid,
 			})
+		case av.H265:
+			elemStreams = append(elemStreams, tsio.ElementaryStreamInfo{
+				StreamType:    tsio.ElementaryStreamTypeH265,
+				ElementaryPID: stream.pid,
+			})
 		}
 	}
 
@@ -203,6 +209,36 @@ func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
 				datav = append(datav, h264parser.AUDBytes)
 			} else {
 				datav = append(datav, h264parser.StartCodeBytes)
+			}
+			datav = append(datav, nalu)
+		}
+
+		n := tsio.FillPESHeader(self.peshdr, tsio.StreamIdH264, -1, pkt.Time+pkt.CompositionTime, pkt.Time)
+		datav[0] = self.peshdr[:n]
+
+		if err = stream.tsw.WritePackets(self.w, datav, pkt.Time, pkt.IsKeyFrame, false); err != nil {
+			return
+		}
+	case av.H265:
+		codec := stream.CodecData.(h265parser.CodecData)
+
+		nalus := self.nalus[:0]
+		if pkt.IsKeyFrame {
+			nalus = append(nalus, codec.SPS())
+			nalus = append(nalus, codec.PPS())
+			nalus = append(nalus, codec.VPS())
+		}
+		pktnalus, _ := h265parser.SplitNALUs(pkt.Data)
+		for _, nalu := range pktnalus {
+			nalus = append(nalus, nalu)
+		}
+
+		datav := self.datav[:1]
+		for i, nalu := range nalus {
+			if i == 0 {
+				datav = append(datav, h265parser.AUDBytes)
+			} else {
+				datav = append(datav, h265parser.StartCodeBytes)
 			}
 			datav = append(datav, nalu)
 		}
