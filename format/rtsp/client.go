@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	//"log"
 	"net"
 	"net/textproto"
 	"net/url"
@@ -147,7 +146,12 @@ func (self *Client) probe() (err error) {
 }
 
 func (self *Client) prepare(stage int) (err error) {
+	var waitIdle int
 	for self.stage < stage {
+		waitIdle++
+		if waitIdle > 20 {
+			return fmt.Errorf("codec not ready")
+		}
 		switch self.stage {
 		case 0:
 			if err = self.Options(); err != nil {
@@ -695,7 +699,9 @@ func (self *Client) Describe() (streams []sdp.Media, err error) {
 	self.streams = []*Stream{}
 	for _, media := range medias {
 		stream := &Stream{Sdp: media, client: self}
-		stream.makeCodecData()
+		if err = stream.makeCodecData(); err != nil && DebugRtsp {
+			fmt.Println("rtsp: makeCodecData error", err)
+		}
 		self.streams = append(self.streams, stream)
 		streams = append(streams, media)
 	}
@@ -767,7 +773,7 @@ func (self *Stream) timeScale() int {
 
 func (self *Stream) makeCodecData() (err error) {
 	media := self.Sdp
-	if media.PayloadType >= 96 && media.PayloadType <= 127 {
+	if (media.PayloadType >= 96 && media.PayloadType <= 127) || media.Type == av.H264 || media.Type == av.AAC {
 		switch media.Type {
 		case av.H264:
 			for _, nalu := range media.SpropParameterSets {
