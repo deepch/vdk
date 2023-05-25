@@ -40,7 +40,7 @@ func NewProxyConn(netconn net.Conn) *ProxyConn {
 	conn.writebuf = make([]byte, 4096)
 	conn.readbuf = make([]byte, 4096)
 	conn.session = uuid.New().String()
-	conn.cseq = 1
+	conn.cseq = 0
 	return conn
 }
 
