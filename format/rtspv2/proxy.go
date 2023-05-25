@@ -3,7 +3,6 @@ package rtspv2
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -181,7 +180,6 @@ func (self *ProxyConn) prepare() error {
 			}
 			return nil
 		}
-		log.Println("RTSP/1.0 200 OK\r\nCSeq: " + cseq + "\r\nSession: " + self.session + "\r\nTransport: RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(self.in) + "-" + strconv.Itoa(self.in+1) + "\r\n\r\n")
 		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nCSeq: " + cseq + "\r\nSession: " + self.session + "\r\nTransport: RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(self.in) + "-" + strconv.Itoa(self.in+1) + "\r\n\r\n"))
 		if err != nil {
 			return err
