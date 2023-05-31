@@ -65,10 +65,6 @@ func (element *Muxer) NewPeerConnection(configuration webrtc.Configuration) (*we
 			Credential:     element.Options.ICECredential,
 			CredentialType: webrtc.ICECredentialTypePassword,
 		})
-	} else {
-		configuration.ICEServers = append(configuration.ICEServers, webrtc.ICEServer{
-			URLs: []string{"stun:stun.l.google.com:19302"},
-		})
 	}
 	m := &webrtc.MediaEngine{}
 	if err := m.RegisterDefaultCodecs(); err != nil {
