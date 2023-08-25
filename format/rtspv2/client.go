@@ -150,9 +150,12 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	for _, i2 := range client.mediaSDP {
 		if (i2.AVType != VIDEO && i2.AVType != AUDIO) || (client.options.DisableAudio && i2.AVType == AUDIO) {
+			//TODO check it
+			if strings.Contains(string(client.SDPRaw), "LaunchDigital") {
+				client.chTMP += 2
+			}
 			continue
 		}
 		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(client.chTMP) + "-" + strconv.Itoa(client.chTMP+1)}, client.ControlTrack(i2.Control), false, false)
@@ -945,14 +948,14 @@ func (client *RTSPClient) CodecUpdateVPS(val []byte) {
 
 }
 
-//Println mini logging functions
+// Println mini logging functions
 func (client *RTSPClient) Println(v ...interface{}) {
 	if client.options.Debug {
 		log.Println(v)
 	}
 }
 
-//binSize
+// binSize
 func binSize(val int) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(val))
