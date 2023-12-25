@@ -172,7 +172,8 @@ func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
 	stream, ok := self.streams[int(pkt.Idx)]
 	if !ok {
 		fmt.Printf("Warning, unsupported stream index: %d\n", pkt.Idx)
-		return
+		err = fmt.Errorf("Warning, unsupported stream index: %d", pkt.Idx)
+		return err
 	}
 
 	pkt.Time += time.Second
