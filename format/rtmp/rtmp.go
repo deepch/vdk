@@ -258,7 +258,10 @@ func (self *Conn) RxBytes() uint64 {
 }
 
 func (self *Conn) Close() (err error) {
-	return self.netconn.Close()
+	if self.netconn != nil {
+		return self.netconn.Close()
+	}
+	return
 }
 
 func (self *Conn) pollCommand() (err error) {

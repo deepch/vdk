@@ -592,6 +592,9 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		}
 	}
 	offset += 4
+	if len(content) < end {
+		return nil, false
+	}
 	switch int(content[1]) {
 	case client.videoID:
 		if client.PreVideoTS == 0 {
@@ -750,7 +753,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 						}
 					}
 				default:
-					client.Println("Unsupported NAL Type", naluType)
+					//client.Println("Unsupported NAL Type", naluType)
 				}
 			}
 		}

@@ -36,7 +36,7 @@ type FilterDemuxer struct {
 	audioidx int
 }
 
-func (self FilterDemuxer) ReadPacket() (pkt av.Packet, err error) {
+func (self *FilterDemuxer) ReadPacket() (pkt av.Packet, err error) {
 	if self.streams == nil {
 		if self.streams, err = self.Demuxer.Streams(); err != nil {
 			return
