@@ -170,6 +170,20 @@ func (self *AVSync) check(i int) (start time.Duration, end time.Duration, correc
 	return
 }
 
+type CalcDuration struct {
+	LastTime map[int8]time.Duration
+}
+
+func (self *CalcDuration) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	if tmp, ok := self.LastTime[pkt.Idx]; ok && tmp != 0 {
+		pkt.Duration = pkt.Time - self.LastTime[pkt.Idx]
+	} else if pkt.Time < 100*time.Millisecond {
+		pkt.Duration = pkt.Time
+	}
+	self.LastTime[pkt.Idx] = pkt.Time
+	return
+}
+
 // Make packets reading speed as same as walltime, effect like ffmpeg -re option.
 type Walltime struct {
 	firsttime time.Time

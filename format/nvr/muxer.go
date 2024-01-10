@@ -16,7 +16,7 @@ import (
 )
 
 var MIME = []byte{11, 22, 111, 222, 11, 22, 111, 222}
-var listTag = []string{"{host_name}", "{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}", "{start_year}", "{start_month}", "{start_day}", "{start_minute}", "{start_second}", "{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}", "{end_year}", "{end_month}", "{end_day}", "{end_minute}", "{end_second}", "{end_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
+var listTag = []string{"{server_id}", "{hostname_short}", "{hostname_long}", "{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}", "{start_year}", "{start_month}", "{start_day}", "{start_minute}", "{start_second}", "{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}", "{end_year}", "{end_month}", "{end_day}", "{end_minute}", "{end_second}", "{end_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
 
 const (
 	MP4 = "mp4"
@@ -24,19 +24,19 @@ const (
 )
 
 type Muxer struct {
-	muxer                                                  *mp4.Muxer
-	format                                                 string
-	limit                                                  int
-	d                                                      *os.File
-	m                                                      *os.File
-	dur                                                    time.Duration
-	h                                                      int
-	gof                                                    *Gof
-	patch                                                  string
-	start, end                                             time.Time
-	pstart, pend                                           time.Duration
-	started                                                bool
-	hostName, streamName, channelName, streamID, channelID string
+	muxer                                                            *mp4.Muxer
+	format                                                           string
+	limit                                                            int
+	d                                                                *os.File
+	m                                                                *os.File
+	dur                                                              time.Duration
+	h                                                                int
+	gof                                                              *Gof
+	patch                                                            string
+	start, end                                                       time.Time
+	pstart, pend                                                     time.Duration
+	started                                                          bool
+	serverID, streamName, channelName, streamID, channelID, hostname string
 }
 
 type Gof struct {
@@ -64,18 +64,20 @@ func init() {
 
 }
 
-func NewMuxer(hostName, streamName, channelName, streamID, channelID, patch string, format string, limit int) (m *Muxer, err error) {
+func NewMuxer(serverID, streamName, channelName, streamID, channelID, patch string, format string, limit int) (m *Muxer, err error) {
+	hostname, _ := os.Hostname()
 	m = &Muxer{
 		patch:       patch,
 		h:           -1,
 		gof:         &Gof{},
 		format:      format,
 		limit:       limit,
-		hostName:    hostName,
+		serverID:    serverID,
 		streamName:  streamName,
 		channelName: channelName,
 		streamID:    streamID,
 		channelID:   channelID,
+		hostname:    hostname,
 	}
 	return
 }
@@ -186,7 +188,12 @@ func (m *Muxer) OpenNVR() (err error) {
 func (m *Muxer) OpenMP4() (err error) {
 	m.WriteTrailer()
 	m.start = time.Now().UTC()
-	if m.d, err = os.CreateTemp("", "rtspvideo.*.mp4"); err != nil {
+
+	p := m.filePatch()
+	if err = os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		return
+	}
+	if m.d, err = os.Create(filepath.Dir(p) + "/tmp.mp4"); err != nil {
 		return
 	}
 	m.muxer = mp4.NewMuxer(m.d)
@@ -202,8 +209,12 @@ func (m *Muxer) filePatch() string {
 	m.end = time.Now().UTC()
 	for _, s := range listTag {
 		switch s {
-		case "{host_name}":
-			ts = strings.Replace(ts, "{host_name}", m.hostName, -1)
+		case "{server_id}":
+			ts = strings.Replace(ts, "{host_name}", m.serverID, -1)
+		case "{hostname_short}":
+			ts = strings.Replace(ts, "{host_name}", m.hostname, -1)
+		case "{hostname_long}":
+			ts = strings.Replace(ts, "{host_name}", m.hostname, -1)
 		case "{stream_name}":
 			ts = strings.Replace(ts, "{stream_name}", m.streamName, -1)
 		case "{channel_name}":
