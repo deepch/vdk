@@ -10,6 +10,7 @@ import (
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/mp4"
+	"github.com/google/uuid"
 	"github.com/moby/sys/mountinfo"
 	"github.com/shirou/gopsutil/v3/disk"
 	"os"
@@ -19,7 +20,7 @@ import (
 )
 
 var MIME = []byte{11, 22, 111, 222, 11, 22, 111, 222}
-var listTag = []string{"{server_id}", "{host_name}", "{host_name_short}", "{host_name_long}", "{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}", "{start_year}", "{start_month}", "{start_day}", "{start_minute}", "{start_second}", "{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}", "{end_year}", "{end_month}", "{end_day}", "{end_minute}", "{end_second}", "{end_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
+var listTag = []string{"{server_id}", "{host_name}", "{host_name_short}", "{host_name_long}", "{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}", "{start_year}", "{start_month}", "{start_day}", "{start_hour}", "{start_minute}", "{start_second}", "{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}", "{end_year}", "{end_month}", "{end_day}", "{end_hour}", "{end_minute}", "{end_second}", "{end_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
 
 const (
 	MP4 = "mp4"
@@ -198,14 +199,14 @@ func (m *Muxer) OpenMP4() (err error) {
 	m.WriteTrailer()
 	m.start = time.Now().UTC()
 
-	p, err := m.filePatch()
+	d, err := m.filePatch()
 	if err != nil {
 		return
 	}
-	if err = os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+	if err = os.MkdirAll(filepath.Dir(d), 0755); err != nil {
 		return
 	}
-	if m.d, err = os.Create(filepath.Dir(p) + "/tmp.mp4"); err != nil {
+	if m.d, err = os.Create(filepath.Join(filepath.Dir(d), fmt.Sprintf("tmp_%s_%d.mp4", uuid.New(), time.Now().Unix()))); err != nil {
 		return
 	}
 	m.muxer = mp4.NewMuxer(m.d)
@@ -264,6 +265,8 @@ func (m *Muxer) filePatch() (string, error) {
 			ts = strings.Replace(ts, "{start_month}", fmt.Sprintf("%d", int(m.start.Month())), -1)
 		case "{start_day}":
 			ts = strings.Replace(ts, "{start_day}", fmt.Sprintf("%d", m.start.Day()), -1)
+		case "{start_hour}":
+			ts = strings.Replace(ts, "{start_hour}", fmt.Sprintf("%d", m.start.Hour()), -1)
 		case "{start_minute}":
 			ts = strings.Replace(ts, "{start_minute}", fmt.Sprintf("%d", m.start.Minute()), -1)
 		case "{start_second}":
@@ -284,6 +287,8 @@ func (m *Muxer) filePatch() (string, error) {
 			ts = strings.Replace(ts, "{end_month}", fmt.Sprintf("%d", int(m.end.Month())), -1)
 		case "{end_day}":
 			ts = strings.Replace(ts, "{end_day}", fmt.Sprintf("%d", m.end.Day()), -1)
+		case "{end_hour}":
+			ts = strings.Replace(ts, "{end_hour}", fmt.Sprintf("%d", m.end.Hour()), -1)
 		case "{end_minute}":
 			ts = strings.Replace(ts, "{end_minute}", fmt.Sprintf("%d", m.end.Minute()), -1)
 		case "{end_second}":
@@ -321,10 +326,7 @@ func (m *Muxer) WriteTrailer() (err error) {
 			if err != nil {
 				return err
 			}
-			if err = os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-				return err
-			}
-			if err = os.Rename(m.d.Name(), p); err != nil {
+			if err = os.Rename(m.d.Name(), filepath.Join(filepath.Dir(m.d.Name()), filepath.Base(p))); err != nil {
 				return err
 			}
 		}
