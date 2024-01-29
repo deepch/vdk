@@ -210,6 +210,7 @@ func (m *Muxer) OpenMP4() (err error) {
 		return
 	}
 	m.muxer = mp4.NewMuxer(m.d)
+	m.muxer.NegativeTsMakeZero = true
 	if err = m.muxer.WriteHeader(m.gof.Streams); err != nil {
 		return
 	}

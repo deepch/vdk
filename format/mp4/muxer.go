@@ -3,23 +3,22 @@ package mp4
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"time"
-
-	"github.com/deepch/vdk/codec/h265parser"
-
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
+	"github.com/deepch/vdk/codec/h265parser"
 	"github.com/deepch/vdk/format/mp4/mp4io"
 	"github.com/deepch/vdk/utils/bits/pio"
+	"io"
+	"time"
 )
 
 type Muxer struct {
-	w       io.WriteSeeker
-	bufw    *bufio.Writer
-	wpos    int64
-	streams []*Stream
+	w                  io.WriteSeeker
+	bufw               *bufio.Writer
+	wpos               int64
+	streams            []*Stream
+	NegativeTsMakeZero bool
 }
 
 func NewMuxer(w io.WriteSeeker) *Muxer {
@@ -206,8 +205,12 @@ func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
 
 func (self *Stream) writePacket(pkt av.Packet, rawdur time.Duration) (err error) {
 	if rawdur < 0 {
-		err = fmt.Errorf("mp4: stream#%d time=%v < lasttime=%v", pkt.Idx, pkt.Time, self.lastpkt.Time)
-		return
+		if self.muxer.NegativeTsMakeZero {
+			rawdur = 0
+		} else {
+			err = fmt.Errorf("mp4: stream#%d time=%v < lasttime=%v", pkt.Idx, pkt.Time, self.lastpkt.Time)
+			return
+		}
 	}
 
 	if _, err = self.muxer.bufw.Write(pkt.Data); err != nil {
