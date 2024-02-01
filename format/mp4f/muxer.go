@@ -3,6 +3,7 @@ package mp4f
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -238,14 +239,15 @@ func (self *Muxer) WriteTrailer() (err error) {
 	return
 }
 
-func (element *Muxer) WriteHeader(streams []av.CodecData) (err error) {
+func (element *Muxer) WriteHeader(streams []av.CodecData) error {
 	element.streams = []*Stream{}
 	for _, stream := range streams {
-		if err = element.newStream(stream); err != nil {
-			return
+		if err := element.newStream(stream); err != nil {
+			log.Println("WriteHeader", err)
 		}
 	}
-	return
+
+	return nil
 }
 
 func (element *Muxer) GetInit(streams []av.CodecData) (string, []byte) {
@@ -285,6 +287,9 @@ func (element *Muxer) GetInit(streams []av.CodecData) (string, []byte) {
 }
 
 func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error) {
+	if pkt.Idx+1 > int8(len(element.streams)) {
+		return false, nil, nil
+	}
 	stream := element.streams[pkt.Idx]
 	if GOP {
 		ts := time.Duration(0)

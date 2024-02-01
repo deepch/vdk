@@ -40,9 +40,10 @@ const (
 )
 
 type Client struct {
-	DebugRtsp bool
-	DebugRtp  bool
-	Headers   []string
+	DebugRtsp    bool
+	DebugRtp     bool
+	DisableAudio bool
+	Headers      []string
 
 	SkipErrRtpBlock bool
 
@@ -1076,12 +1077,44 @@ func (self *Stream) handleRtpPacket(packet []byte) (err error) {
 		err = fmt.Errorf("rtp: packet too short")
 		return
 	}
-	payloadOffset := 12 + int(packet[0]&0xf)*4
+
+	timestamp := binary.BigEndian.Uint32(packet[4:8])
+
+	/*
+		Test offset
+	*/
+	Padding := (packet[0]>>5)&1 == 1
+	Extension := (packet[0]>>4)&1 == 1
+	CSRCCnt := int(packet[0] & 0x0f)
+
+	RTPHeaderSize := 12
+
+	payloadOffset := RTPHeaderSize
+	end := len(packet)
+	if end-payloadOffset >= 4*CSRCCnt {
+		payloadOffset += 4 * CSRCCnt
+	}
+
+	if Extension && end-payloadOffset >= 4 {
+		extLen := 4 * int(binary.BigEndian.Uint16(packet[payloadOffset+2:]))
+		payloadOffset += 4
+		if end-payloadOffset >= extLen {
+			payloadOffset += extLen
+		}
+	}
+
+	if Padding && end-payloadOffset > 0 {
+		paddingLen := int(packet[end-1])
+		if end-payloadOffset >= paddingLen {
+			end -= paddingLen
+		}
+	}
+
 	if payloadOffset > len(packet) {
 		err = fmt.Errorf("rtp: packet too short")
 		return
 	}
-	timestamp := binary.BigEndian.Uint32(packet[4:8])
+
 	payload := packet[payloadOffset:]
 
 	/*

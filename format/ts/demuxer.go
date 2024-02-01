@@ -284,7 +284,11 @@ func (self *Stream) payloadEnd() (n int, err error) {
 						b := make([]byte, 4+len(nalu))
 						pio.PutU32BE(b[0:4], uint32(len(nalu)))
 						copy(b[4:], nalu)
-						self.addPacket(b, time.Duration(0), (1000*time.Millisecond)/time.Duration(self.fps))
+						fps := self.fps
+						if self.fps == 0 {
+							fps = 25
+						}
+						self.addPacket(b, time.Duration(0), (1000*time.Millisecond)/time.Duration(fps))
 						n++
 					}
 				}
