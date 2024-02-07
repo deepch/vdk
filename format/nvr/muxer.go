@@ -274,15 +274,15 @@ func (m *Muxer) filePatch() (string, error) {
 		case "{start_year}":
 			ts = strings.Replace(ts, "{start_year}", fmt.Sprintf("%d", m.start.Year()), -1)
 		case "{start_month}":
-			ts = strings.Replace(ts, "{start_month}", fmt.Sprintf("%d", int(m.start.Month())), -1)
+			ts = strings.Replace(ts, "{start_month}", fmt.Sprintf("%02d", int(m.start.Month())), -1)
 		case "{start_day}":
-			ts = strings.Replace(ts, "{start_day}", fmt.Sprintf("%d", m.start.Day()), -1)
+			ts = strings.Replace(ts, "{start_day}", fmt.Sprintf("%02d", m.start.Day()), -1)
 		case "{start_hour}":
-			ts = strings.Replace(ts, "{start_hour}", fmt.Sprintf("%d", m.start.Hour()), -1)
+			ts = strings.Replace(ts, "{start_hour}", fmt.Sprintf("%02d", m.start.Hour()), -1)
 		case "{start_minute}":
-			ts = strings.Replace(ts, "{start_minute}", fmt.Sprintf("%d", m.start.Minute()), -1)
+			ts = strings.Replace(ts, "{start_minute}", fmt.Sprintf("%02d", m.start.Minute()), -1)
 		case "{start_second}":
-			ts = strings.Replace(ts, "{start_second}", fmt.Sprintf("%d", m.start.Second()), -1)
+			ts = strings.Replace(ts, "{start_second}", fmt.Sprintf("%02d", m.start.Second()), -1)
 		case "{start_millisecond}":
 			ts = strings.Replace(ts, "{start_millisecond}", fmt.Sprintf("%d", m.start.Nanosecond()/1000/1000), -1)
 		case "{start_unix_millisecond}":
@@ -296,15 +296,15 @@ func (m *Muxer) filePatch() (string, error) {
 		case "{end_year}":
 			ts = strings.Replace(ts, "{end_year}", fmt.Sprintf("%d", m.end.Year()), -1)
 		case "{end_month}":
-			ts = strings.Replace(ts, "{end_month}", fmt.Sprintf("%d", int(m.end.Month())), -1)
+			ts = strings.Replace(ts, "{end_month}", fmt.Sprintf("%02d", int(m.end.Month())), -1)
 		case "{end_day}":
-			ts = strings.Replace(ts, "{end_day}", fmt.Sprintf("%d", m.end.Day()), -1)
+			ts = strings.Replace(ts, "{end_day}", fmt.Sprintf("%02d", m.end.Day()), -1)
 		case "{end_hour}":
-			ts = strings.Replace(ts, "{end_hour}", fmt.Sprintf("%d", m.end.Hour()), -1)
+			ts = strings.Replace(ts, "{end_hour}", fmt.Sprintf("%02d", m.end.Hour()), -1)
 		case "{end_minute}":
-			ts = strings.Replace(ts, "{end_minute}", fmt.Sprintf("%d", m.end.Minute()), -1)
+			ts = strings.Replace(ts, "{end_minute}", fmt.Sprintf("%02d", m.end.Minute()), -1)
 		case "{end_second}":
-			ts = strings.Replace(ts, "{end_second}", fmt.Sprintf("%d", m.end.Second()), -1)
+			ts = strings.Replace(ts, "{end_second}", fmt.Sprintf("%02d", m.end.Second()), -1)
 		case "{end_millisecond}":
 			ts = strings.Replace(ts, "{end_millisecond}", fmt.Sprintf("%d", m.end.Nanosecond()/1000/1000), -1)
 		case "{end_unix_millisecond}":
