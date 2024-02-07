@@ -20,7 +20,13 @@ import (
 )
 
 var MIME = []byte{11, 22, 111, 222, 11, 22, 111, 222}
-var listTag = []string{"{server_id}", "{host_name}", "{host_name_short}", "{host_name_long}", "{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}", "{start_year}", "{start_month}", "{start_day}", "{start_hour}", "{start_minute}", "{start_second}", "{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}", "{end_year}", "{end_month}", "{end_day}", "{end_hour}", "{end_minute}", "{end_second}", "{end_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
+
+var listTag = []string{"{server_id}", "{host_name}", "{host_name_short}", "{host_name_long}",
+	"{stream_name}", "{channel_name}", "{stream_id}", "{channel_id}",
+	"{start_year}", "{start_month}", "{start_day}", "{start_hour}", "{start_minute}", "{start_second}",
+	"{start_millisecond}", "{start_unix_second}", "{start_unix_millisecond}", "{start_time}", "{start_pts}",
+	"{end_year}", "{end_month}", "{end_day}", "{end_hour}", "{end_minute}", "{end_second}",
+	"{end_millisecond}", "{end_unix_millisecond}", "{end_unix_second}", "{end_time}", "{end_pts}", "{duration_second}", "{duration_millisecond}"}
 
 const (
 	MP4 = "mp4"
@@ -275,9 +281,9 @@ func (m *Muxer) filePatch() (string, error) {
 		case "{start_millisecond}":
 			ts = strings.Replace(ts, "{start_millisecond}", fmt.Sprintf("%d", m.start.Nanosecond()/1000/1000), -1)
 		case "{start_unix_millisecond}":
-			ts = strings.Replace(ts, "{start_unix_millisecond}", fmt.Sprintf("%d", m.end.UnixMilli()), -1)
+			ts = strings.Replace(ts, "{start_unix_millisecond}", fmt.Sprintf("%d", m.start.UnixMilli()), -1)
 		case "{start_unix_second}":
-			ts = strings.Replace(ts, "{start_unix_second}", fmt.Sprintf("%d", m.end.Unix()), -1)
+			ts = strings.Replace(ts, "{start_unix_second}", fmt.Sprintf("%d", m.start.Unix()), -1)
 		case "{start_time}":
 			ts = strings.Replace(ts, "{start_time}", fmt.Sprintf("%s", m.start.Format("2006-01-02T15:04:05-0700")), -1)
 		case "{start_pts}":
@@ -295,7 +301,7 @@ func (m *Muxer) filePatch() (string, error) {
 		case "{end_second}":
 			ts = strings.Replace(ts, "{end_second}", fmt.Sprintf("%d", m.end.Second()), -1)
 		case "{end_millisecond}":
-			ts = strings.Replace(ts, "{end_millisecond}", fmt.Sprintf("%d", m.start.Nanosecond()/1000/1000), -1)
+			ts = strings.Replace(ts, "{end_millisecond}", fmt.Sprintf("%d", m.end.Nanosecond()/1000/1000), -1)
 		case "{end_unix_millisecond}":
 			ts = strings.Replace(ts, "{end_unix_millisecond}", fmt.Sprintf("%d", m.end.UnixMilli()), -1)
 		case "{end_unix_second}":
