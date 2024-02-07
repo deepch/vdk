@@ -34,20 +34,20 @@ const (
 )
 
 type Muxer struct {
-	muxer                                                            *mp4.Muxer
-	format                                                           string
-	limit                                                            int
-	d                                                                *os.File
-	m                                                                *os.File
-	dur                                                              time.Duration
-	h                                                                int
-	gof                                                              *Gof
-	patch                                                            string
-	mpoint                                                           []string
-	start, end                                                       time.Time
-	pstart, pend                                                     time.Duration
-	started                                                          bool
-	serverID, streamName, channelName, streamID, channelID, hostname string
+	muxer                                                                       *mp4.Muxer
+	format                                                                      string
+	limit                                                                       int
+	d                                                                           *os.File
+	m                                                                           *os.File
+	dur                                                                         time.Duration
+	h                                                                           int
+	gof                                                                         *Gof
+	patch                                                                       string
+	mpoint                                                                      []string
+	start, end                                                                  time.Time
+	pstart, pend                                                                time.Duration
+	started                                                                     bool
+	serverID, streamName, channelName, streamID, channelID, hostLong, hostShort string
 }
 
 type Gof struct {
@@ -76,7 +76,11 @@ func init() {
 }
 
 func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpoint []string, patch, format string, limit int) (m *Muxer, err error) {
-	hostname, _ := os.Hostname()
+	hostLong, _ := os.Hostname()
+	var hostShort string
+	if p, _, ok := strings.Cut(hostLong, "."); ok {
+		hostShort = p
+	}
 	m = &Muxer{
 		mpoint:      mpoint,
 		patch:       patch,
@@ -89,7 +93,8 @@ func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpo
 		channelName: channelName,
 		streamID:    streamID,
 		channelID:   channelID,
-		hostname:    hostname,
+		hostLong:    hostLong,
+		hostShort:   hostShort,
 	}
 	return
 }
@@ -253,11 +258,11 @@ func (m *Muxer) filePatch() (string, error) {
 		case "{server_id}":
 			ts = strings.Replace(ts, "{server_id}", m.serverID, -1)
 		case "{host_name}":
-			ts = strings.Replace(ts, "{host_name}", m.hostname, -1)
+			ts = strings.Replace(ts, "{host_name}", m.hostLong, -1)
 		case "{host_name_short}":
-			ts = strings.Replace(ts, "{host_name_short}", m.hostname, -1)
+			ts = strings.Replace(ts, "{host_name_short}", m.hostShort, -1)
 		case "{host_name_long}":
-			ts = strings.Replace(ts, "{host_name_long}", m.hostname, -1)
+			ts = strings.Replace(ts, "{host_name_long}", m.hostLong, -1)
 		case "{stream_name}":
 			ts = strings.Replace(ts, "{stream_name}", m.streamName, -1)
 		case "{channel_name}":
