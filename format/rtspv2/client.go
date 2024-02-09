@@ -699,7 +699,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 								Data:            append(binSize(len(packet[2:size+2])), packet[2:size+2]...),
 								CompositionTime: time.Duration(1) * time.Millisecond,
 								Idx:             client.videoIDX,
-								IsKeyFrame:      naluType == 5,
+								IsKeyFrame:      naluTypefs == 5,
 								Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
 								Time:            time.Duration(timestamp/90) * time.Millisecond,
 							})
