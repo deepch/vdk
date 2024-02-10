@@ -194,18 +194,16 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 	return retmap
 }
 
+const (
+	TimeBaseFactor = 90
+	TimeDelay      = 1
+)
+
 func (client *RTSPClient) handleH265Payload(nal []byte, retmap []*av.Packet) []*av.Packet {
 	naluType := (nal[0] >> 1) & 0x3f
 	switch naluType {
 	case h265parser.NAL_UNIT_CODED_SLICE_TRAIL_R:
-		retmap = append(retmap, &av.Packet{
-			Data:            append(binSize(len(nal)), nal...),
-			CompositionTime: time.Duration(1) * time.Millisecond,
-			Idx:             client.videoIDX,
-			IsKeyFrame:      false,
-			Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/90) * time.Millisecond,
-			Time:            time.Duration(client.timestamp/90) * time.Millisecond,
-		})
+		retmap = client.appendVideoPacket(retmap, nal, false)
 	case h265parser.NAL_UNIT_VPS:
 		client.CodecUpdateVPS(nal)
 	case h265parser.NAL_UNIT_SPS:
@@ -215,7 +213,8 @@ func (client *RTSPClient) handleH265Payload(nal []byte, retmap []*av.Packet) []*
 	case h265parser.NAL_UNIT_UNSPECIFIED_49:
 		se := nal[2] >> 6
 		naluType := nal[2] & 0x3f
-		if se == 2 {
+		switch se {
+		case 2:
 			client.BufferRtpPacket.Truncate(0)
 			client.BufferRtpPacket.Reset()
 			client.BufferRtpPacket.Write([]byte{(nal[0] & 0x81) | (naluType << 1), nal[1]})
@@ -223,23 +222,15 @@ func (client *RTSPClient) handleH265Payload(nal []byte, retmap []*av.Packet) []*
 			r[1] = nal[1]
 			r[0] = (nal[0] & 0x81) | (naluType << 1)
 			client.BufferRtpPacket.Write(nal[3:])
-		} else if se == 1 {
+		case 1:
 			client.BufferRtpPacket.Write(nal[3:])
-			retmap = append(retmap, &av.Packet{
-				Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
-				CompositionTime: time.Duration(1) * time.Millisecond,
-				Idx:             client.videoIDX,
-				IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
-				Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/90) * time.Millisecond,
-				Time:            time.Duration(client.timestamp/90) * time.Millisecond,
-			})
-		} else {
+			retmap = client.appendVideoPacket(retmap, client.BufferRtpPacket.Bytes(), naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL)
+		default:
 			client.BufferRtpPacket.Write(nal[3:])
 		}
 	default:
 		//client.Println("Unsupported Nal", naluType)
 	}
-
 	return retmap
 }
 
@@ -252,39 +243,12 @@ func (client *RTSPClient) handleAudio(content []byte) ([]*av.Packet, bool) {
 	for _, nal := range nalRaw {
 		var duration time.Duration
 		switch client.audioCodec {
-		case av.PCM_MULAW:
+		case av.PCM_MULAW, av.PCM_ALAW:
 			duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-			client.AudioTimeLine += duration
-			retmap = append(retmap, &av.Packet{
-				Data:            nal,
-				CompositionTime: time.Duration(1) * time.Millisecond,
-				Duration:        duration,
-				Idx:             client.audioIDX,
-				IsKeyFrame:      false,
-				Time:            client.AudioTimeLine,
-			})
-		case av.PCM_ALAW:
-			duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-			client.AudioTimeLine += duration
-			retmap = append(retmap, &av.Packet{
-				Data:            nal,
-				CompositionTime: time.Duration(1) * time.Millisecond,
-				Duration:        duration,
-				Idx:             client.audioIDX,
-				IsKeyFrame:      false,
-				Time:            client.AudioTimeLine,
-			})
+			retmap = client.appendAudioPacket(retmap, nal, duration)
 		case av.OPUS:
 			duration = time.Duration(20) * time.Millisecond
-			client.AudioTimeLine += duration
-			retmap = append(retmap, &av.Packet{
-				Data:            nal,
-				CompositionTime: time.Duration(1) * time.Millisecond,
-				Duration:        duration,
-				Idx:             client.audioIDX,
-				IsKeyFrame:      false,
-				Time:            client.AudioTimeLine,
-			})
+			retmap = client.appendAudioPacket(retmap, nal, duration)
 		case av.AAC:
 			auHeadersLength := uint16(0) | (uint16(nal[0]) << 8) | uint16(nal[1])
 			auHeadersCount := auHeadersLength >> 4
@@ -301,15 +265,7 @@ func (client *RTSPClient) handleAudio(content []byte) ([]*av.Packet, bool) {
 					frame = frame[7:]
 				}
 				duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000*1000*1000) * time.Nanosecond
-				client.AudioTimeLine += duration
-				retmap = append(retmap, &av.Packet{
-					Data:            frame,
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Duration:        duration,
-					Idx:             client.audioIDX,
-					IsKeyFrame:      false,
-					Time:            client.AudioTimeLine,
-				})
+				retmap = client.appendAudioPacket(retmap, frame, duration)
 			}
 		}
 	}
@@ -317,6 +273,28 @@ func (client *RTSPClient) handleAudio(content []byte) ([]*av.Packet, bool) {
 		client.PreAudioTS = client.timestamp
 		return retmap, true
 	}
-
 	return nil, false
+}
+
+func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, duration time.Duration) []*av.Packet {
+	client.AudioTimeLine += duration
+	return append(retmap, &av.Packet{
+		Data:            nal,
+		CompositionTime: time.Duration(1) * time.Millisecond,
+		Duration:        duration,
+		Idx:             client.audioIDX,
+		IsKeyFrame:      false,
+		Time:            client.AudioTimeLine,
+	})
+}
+
+func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	return append(retmap, &av.Packet{
+		Data:            append(binSize(len(nal)), nal...),
+		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
+		Idx:             client.videoIDX,
+		IsKeyFrame:      isKeyFrame,
+		Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/TimeBaseFactor) * time.Millisecond,
+		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
+	})
 }
