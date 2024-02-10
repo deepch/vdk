@@ -10,8 +10,12 @@ import (
 	"time"
 )
 
-func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
+const (
+	TimeBaseFactor = 90
+	TimeDelay      = 1
+)
 
+func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	content := *payloadRAW
 	firstByte := content[4]
 	padding := (firstByte>>5)&1 == 1
@@ -57,8 +61,6 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 		return client.handleVideo(content)
 	case client.audioID:
 		return client.handleAudio(content)
-	default:
-		//client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
 	}
 	return nil, false
 }
@@ -108,17 +110,10 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 	naluType := nal[0] & 0x1f
 	switch {
 	case naluType >= 1 && naluType <= 5:
-		retmap = append(retmap, &av.Packet{
-			Data:            append(binSize(len(nal)), nal...),
-			CompositionTime: time.Duration(1) * time.Millisecond,
-			Idx:             client.videoIDX,
-			IsKeyFrame:      naluType == 5,
-			Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/90) * time.Millisecond,
-			Time:            time.Duration(client.timestamp/90) * time.Millisecond,
-		})
-	case naluType == 7:
+		retmap = client.appendVideoPacket(retmap, nal, naluType == 5)
+	case naluType == h264parser.NALU_SPS:
 		client.CodecUpdateSPS(nal)
-	case naluType == 8:
+	case naluType == h264parser.NALU_PPS:
 		client.CodecUpdatePPS(nal)
 	case naluType == 24:
 		packet := nal[1:]
@@ -130,17 +125,10 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 			naluTypefs := packet[2] & 0x1f
 			switch {
 			case naluTypefs >= 1 && naluTypefs <= 5:
-				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(len(packet[2:size+2])), packet[2:size+2]...),
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Idx:             client.videoIDX,
-					IsKeyFrame:      naluType == 5,
-					Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/90) * time.Millisecond,
-					Time:            time.Duration(client.timestamp/90) * time.Millisecond,
-				})
-			case naluTypefs == 7:
+				retmap = client.appendVideoPacket(retmap, packet[2:size+2], naluTypefs == 5)
+			case naluTypefs == h264parser.NALU_SPS:
 				client.CodecUpdateSPS(packet[2 : size+2])
-			case naluTypefs == 8:
+			case naluTypefs == h264parser.NALU_PPS:
 				client.CodecUpdatePPS(packet[2 : size+2])
 			}
 			packet = packet[size+2:]
@@ -170,21 +158,14 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 							client.BufferRtpPacket.Reset()
 							client.BufferRtpPacket.Write(v)
 							naluTypef = 5
-						case naluTypefs == 7:
+						case naluTypefs == h264parser.NALU_SPS:
 							client.CodecUpdateSPS(v)
-						case naluTypefs == 8:
+						case naluTypefs == h264parser.NALU_PPS:
 							client.CodecUpdatePPS(v)
 						}
 					}
 				}
-				retmap = append(retmap, &av.Packet{
-					Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/90) * time.Millisecond,
-					Idx:             client.videoIDX,
-					IsKeyFrame:      naluTypef == 5,
-					Time:            time.Duration(client.timestamp/90) * time.Millisecond,
-				})
+				retmap = client.appendVideoPacket(retmap, client.BufferRtpPacket.Bytes(), naluTypef == 5)
 			}
 		}
 	default:
@@ -193,11 +174,6 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 
 	return retmap
 }
-
-const (
-	TimeBaseFactor = 90
-	TimeDelay      = 1
-)
 
 func (client *RTSPClient) handleH265Payload(nal []byte, retmap []*av.Packet) []*av.Packet {
 	naluType := (nal[0] >> 1) & 0x3f
