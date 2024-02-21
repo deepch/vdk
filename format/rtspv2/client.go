@@ -238,7 +238,7 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 		}
 		client.chTMP += 2
 	}
-	customHeaders := map[string]string{"Scale": "1.000000", "Speed": "1.000000", "Range": "npt=0.00-"}
+	customHeaders := map[string]string{"Range": "npt=0.00-"}
 	err = client.request(PLAY, customHeaders, client.control, false, false)
 	if err != nil {
 		return nil, err
