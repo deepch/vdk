@@ -1191,6 +1191,7 @@ func (self *Client) Play() (err error) {
 		Method: "PLAY",
 		Uri:    self.requestUri,
 	}
+	req.Header = append(req.Header, "Range: npt=0.000-")
 	req.Header = append(req.Header, "Session: "+self.session)
 	if err = self.WriteRequest(req); err != nil {
 		return
