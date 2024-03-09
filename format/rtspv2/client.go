@@ -46,6 +46,7 @@ const (
 	DESCRIBE = "DESCRIBE"
 	OPTIONS  = "OPTIONS"
 	PLAY     = "PLAY"
+	PAUSE    = "PAUSE"
 	SETUP    = "SETUP"
 	TEARDOWN = "TEARDOWN"
 )
@@ -271,7 +272,7 @@ func (client *RTSPClient) startStream() {
 			client.Println("RTSP Client RTP SetDeadline", err)
 			return
 		}
-		if int(time.Now().Sub(timer).Seconds()) > 25 {
+		if int(time.Since(timer).Seconds()) > 25 {
 			err := client.request(OPTIONS, map[string]string{"Require": "implicit-play"}, client.control, false, true)
 			if err != nil {
 				client.Println("RTSP Client RTP keep-alive", err)
@@ -335,7 +336,7 @@ func (client *RTSPClient) startStream() {
 					return
 				}
 				responseTmp = append(responseTmp, oneb...)
-				if (len(responseTmp) > 4 && bytes.Compare(responseTmp[len(responseTmp)-4:], []byte("\r\n\r\n")) == 0) || len(responseTmp) > 768 {
+				if (len(responseTmp) > 4 && bytes.Equal(responseTmp[len(responseTmp)-4:], []byte("\r\n\r\n"))) || len(responseTmp) > 768 {
 					if strings.Contains(string(responseTmp), "Content-Length:") {
 						si, err := strconv.Atoi(stringInBetween(string(responseTmp), "Content-Length: ", "\r\n"))
 						if err != nil {
@@ -371,15 +372,13 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 	if client.clientDigest {
 		builder.WriteString(fmt.Sprintf("Authorization: %s\r\n", client.createDigest(method, uri)))
 	}
-	if customHeaders != nil {
-		for k, v := range customHeaders {
-			builder.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
-		}
+	for k, v := range customHeaders {
+		builder.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
 	for k, v := range client.headers {
 		builder.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
-	builder.WriteString(fmt.Sprintf("\r\n"))
+	builder.WriteString("\r\n")
 	client.Println(builder.String())
 	s := builder.String()
 	_, err = client.connRW.WriteString(s)
@@ -505,6 +504,14 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 	return
 }
 
+func (client *RTSPClient) Pause() error {
+	return client.request(PAUSE, nil, client.pURL.String(), false, true)
+}
+
+func (client *RTSPClient) Play(customHeaders map[string]string) error {
+	return client.request(PLAY, customHeaders, client.pURL.String(), false, true)
+}
+
 func (client *RTSPClient) Close() {
 	if client.conn != nil {
 		client.conn.SetDeadline(time.Now().Add(time.Second))
@@ -561,7 +568,7 @@ func (client *RTSPClient) CodecUpdateSPS(val []byte) {
 	if client.videoCodec != av.H264 && client.videoCodec != av.H265 {
 		return
 	}
-	if bytes.Compare(val, client.sps) == 0 {
+	if bytes.Equal(val, client.sps) {
 		return
 	}
 	client.sps = val
@@ -601,7 +608,7 @@ func (client *RTSPClient) CodecUpdatePPS(val []byte) {
 	if client.videoCodec != av.H264 && client.videoCodec != av.H265 {
 		return
 	}
-	if bytes.Compare(val, client.pps) == 0 {
+	if bytes.Equal(val, client.pps) {
 		return
 	}
 	client.pps = val
@@ -641,7 +648,7 @@ func (client *RTSPClient) CodecUpdateVPS(val []byte) {
 	if client.videoCodec != av.H265 {
 		return
 	}
-	if bytes.Compare(val, client.vps) == 0 {
+	if bytes.Equal(val, client.vps) {
 		return
 	}
 	client.vps = val
