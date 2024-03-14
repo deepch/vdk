@@ -97,6 +97,7 @@ type RTSPClient struct {
 	sequenceNumber      int
 	end                 int
 	offset              int
+	status              string
 }
 
 type RTSPClientOptions struct {
@@ -279,6 +280,10 @@ func (client *RTSPClient) startStream() {
 				return
 			}
 			timer = time.Now()
+		}
+		if client.status == PAUSE {
+			// client.Println("RTSP Client PAUSE")
+			continue
 		}
 		if !fixed {
 			nb, err := io.ReadFull(client.connRW, header)
@@ -505,10 +510,12 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 }
 
 func (client *RTSPClient) Pause() error {
+	client.status = PAUSE
 	return client.request(PAUSE, nil, client.pURL.String(), false, true)
 }
 
 func (client *RTSPClient) Play(customHeaders map[string]string) error {
+	client.status = PLAY
 	return client.request(PLAY, customHeaders, client.pURL.String(), false, true)
 }
 

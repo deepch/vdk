@@ -2,12 +2,13 @@ package rtspv2
 
 import (
 	"encoding/binary"
+	"math"
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/codec/h265parser"
-	"math"
-	"time"
 )
 
 const (
