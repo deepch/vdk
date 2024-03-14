@@ -510,13 +510,17 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 }
 
 func (client *RTSPClient) Pause() error {
+	if err := client.request(PAUSE, nil, client.pURL.String(), false, true); err != nil {
+		return err
+	}
 	client.status = PAUSE
-	return client.request(PAUSE, nil, client.pURL.String(), false, true)
 }
 
 func (client *RTSPClient) Play(customHeaders map[string]string) error {
+	if err := client.request(PLAY, customHeaders, client.pURL.String(), false, true); err != nil {
+		return err
+	}
 	client.status = PLAY
-	return client.request(PLAY, customHeaders, client.pURL.String(), false, true)
 }
 
 func (client *RTSPClient) Close() {

@@ -78,9 +78,9 @@ func (client *RTSPClient) handleVideo(content []byte) ([]*av.Packet, bool) {
 			client.PreVideoTS = 0
 		}
 	}
-	if client.PreSequenceNumber != 0 && client.sequenceNumber-client.PreSequenceNumber != 1 {
-		client.Println("drop packet", client.sequenceNumber-1)
-	}
+	// if client.PreSequenceNumber != 0 && client.sequenceNumber-client.PreSequenceNumber != 1 {
+	// 	client.Println("drop packet", client.sequenceNumber-1)
+	// }
 	client.PreSequenceNumber = client.sequenceNumber
 	if client.BufferRtpPacket.Len() > 4048576 {
 		client.Println("Big Buffer Flush")
