@@ -14,10 +14,11 @@ import (
 )
 
 type Muxer struct {
-	w       io.WriteSeeker
-	bufw    *bufio.Writer
-	wpos    int64
-	streams []*Stream
+	w                  io.WriteSeeker
+	bufw               *bufio.Writer
+	wpos               int64
+	streams            []*Stream
+	NegativeTsMakeZero bool
 }
 
 func NewMuxer(w io.WriteSeeker) *Muxer {
@@ -181,8 +182,12 @@ func (self *Muxer) WritePacket(pkt av.Packet) (err error) {
 
 func (self *Stream) writePacket(pkt av.Packet, rawdur time.Duration) (err error) {
 	if rawdur < 0 {
-		err = fmt.Errorf("mp4: stream#%d time=%v < lasttime=%v", pkt.Idx, pkt.Time, self.lastpkt.Time)
-		return
+		if self.muxer.NegativeTsMakeZero {
+			rawdur = 0
+		} else {
+			err = fmt.Errorf("mp4: stream#%d time=%v < lasttime=%v", pkt.Idx, pkt.Time, self.lastpkt.Time)
+			return
+		}
 	}
 
 	if _, err = self.muxer.bufw.Write(pkt.Data); err != nil {

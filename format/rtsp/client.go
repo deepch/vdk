@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	//"log"
 	"net"
 	"net/textproto"
 	"net/url"
@@ -41,9 +40,10 @@ const (
 )
 
 type Client struct {
-	DebugRtsp bool
-	DebugRtp  bool
-	Headers   []string
+	DebugRtsp    bool
+	DebugRtp     bool
+	DisableAudio bool
+	Headers      []string
 
 	SkipErrRtpBlock bool
 
@@ -147,7 +147,12 @@ func (self *Client) probe() (err error) {
 }
 
 func (self *Client) prepare(stage int) (err error) {
+	var waitIdle int
 	for self.stage < stage {
+		waitIdle++
+		if waitIdle > 20 {
+			return fmt.Errorf("codec not ready")
+		}
 		switch self.stage {
 		case 0:
 			if err = self.Options(); err != nil {
@@ -695,7 +700,9 @@ func (self *Client) Describe() (streams []sdp.Media, err error) {
 	self.streams = []*Stream{}
 	for _, media := range medias {
 		stream := &Stream{Sdp: media, client: self}
-		stream.makeCodecData()
+		if err = stream.makeCodecData(); err != nil && DebugRtsp {
+			fmt.Println("rtsp: makeCodecData error", err)
+		}
 		self.streams = append(self.streams, stream)
 		streams = append(streams, media)
 	}
@@ -767,7 +774,7 @@ func (self *Stream) timeScale() int {
 
 func (self *Stream) makeCodecData() (err error) {
 	media := self.Sdp
-	if media.PayloadType >= 96 && media.PayloadType <= 127 {
+	if (media.PayloadType >= 96 && media.PayloadType <= 127) || media.Type == av.H264 || media.Type == av.AAC {
 		switch media.Type {
 		case av.H264:
 			for _, nalu := range media.SpropParameterSets {
@@ -1070,12 +1077,44 @@ func (self *Stream) handleRtpPacket(packet []byte) (err error) {
 		err = fmt.Errorf("rtp: packet too short")
 		return
 	}
-	payloadOffset := 12 + int(packet[0]&0xf)*4
+
+	timestamp := binary.BigEndian.Uint32(packet[4:8])
+
+	/*
+		Test offset
+	*/
+	Padding := (packet[0]>>5)&1 == 1
+	Extension := (packet[0]>>4)&1 == 1
+	CSRCCnt := int(packet[0] & 0x0f)
+
+	RTPHeaderSize := 12
+
+	payloadOffset := RTPHeaderSize
+	end := len(packet)
+	if end-payloadOffset >= 4*CSRCCnt {
+		payloadOffset += 4 * CSRCCnt
+	}
+
+	if Extension && end-payloadOffset >= 4 {
+		extLen := 4 * int(binary.BigEndian.Uint16(packet[payloadOffset+2:]))
+		payloadOffset += 4
+		if end-payloadOffset >= extLen {
+			payloadOffset += extLen
+		}
+	}
+
+	if Padding && end-payloadOffset > 0 {
+		paddingLen := int(packet[end-1])
+		if end-payloadOffset >= paddingLen {
+			end -= paddingLen
+		}
+	}
+
 	if payloadOffset > len(packet) {
 		err = fmt.Errorf("rtp: packet too short")
 		return
 	}
-	timestamp := binary.BigEndian.Uint32(packet[4:8])
+
 	payload := packet[payloadOffset:]
 
 	/*
@@ -1152,6 +1191,7 @@ func (self *Client) Play() (err error) {
 		Method: "PLAY",
 		Uri:    self.requestUri,
 	}
+	req.Header = append(req.Header, "Range: npt=0.000-")
 	req.Header = append(req.Header, "Session: "+self.session)
 	if err = self.WriteRequest(req); err != nil {
 		return

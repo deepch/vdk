@@ -258,7 +258,10 @@ func (self *Conn) RxBytes() uint64 {
 }
 
 func (self *Conn) Close() (err error) {
-	return self.netconn.Close()
+	if self.netconn != nil {
+		return self.netconn.Close()
+	}
+	return
 }
 
 func (self *Conn) pollCommand() (err error) {
@@ -1623,20 +1626,15 @@ func (self *Conn) handshakeServer() (err error) {
 	clitime := pio.U32BE(C1[0:4])
 	srvtime := clitime
 	srvver := uint32(0x0d0e0a0d)
-	cliver := pio.U32BE(C1[4:8])
 
-	if cliver != 0 {
-		var ok bool
-		var digest []byte
-		if ok, digest = hsParse1(C1, hsClientPartialKey, hsServerFullKey); !ok {
-			err = fmt.Errorf("rtmp: handshake server: C1 invalid")
-			return
-		}
+	var ok bool
+	var digest []byte
+	if ok, digest = hsParse1(C1, hsClientPartialKey, hsServerFullKey); ok {
 		hsCreate01(S0S1, srvtime, srvver, hsServerPartialKey)
 		hsCreate2(S2, digest)
 	} else {
-		copy(S1, C1)
-		copy(S2, C2)
+		copy(S1, C2)
+		copy(S2, C1)
 	}
 
 	if _, err = self.bufw.Write(S0S1S2); err != nil {

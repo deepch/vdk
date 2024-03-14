@@ -387,6 +387,12 @@ func ReadFileAtoms(r io.ReadSeeker) (atoms []Atom, err error) {
 			return
 		}
 		size := pio.U32BE(taghdr[0:])
+
+		if size == 0 {
+			err = fmt.Errorf("bad hdr size")
+			return
+		}
+
 		tag := Tag(pio.U32BE(taghdr[4:]))
 
 		var atom Atom

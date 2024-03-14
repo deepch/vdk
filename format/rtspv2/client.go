@@ -12,7 +12,6 @@ import (
 	"html"
 	"io"
 	"log"
-	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -93,6 +92,10 @@ type RTSPClient struct {
 	FPS                 int
 	WaitCodec           bool
 	chTMP               int
+	timestamp           int64
+	sequenceNumber      int
+	end                 int
+	offset              int
 }
 
 type RTSPClientOptions struct {
@@ -150,9 +153,12 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	for _, i2 := range client.mediaSDP {
 		if (i2.AVType != VIDEO && i2.AVType != AUDIO) || (client.options.DisableAudio && i2.AVType == AUDIO) {
+			//TODO check it
+			if strings.Contains(string(client.SDPRaw), "LaunchDigital") {
+				client.chTMP += 2
+			}
 			continue
 		}
 		err = client.request(SETUP, map[string]string{"Transport": "RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(client.chTMP) + "-" + strconv.Itoa(client.chTMP+1)}, client.ControlTrack(i2.Control), false, false)
@@ -551,290 +557,6 @@ func stringInBetween(str string, start string, end string) (result string) {
 	return str
 }
 
-func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
-
-	content := *payloadRAW
-	firstByte := content[4]
-	padding := (firstByte>>5)&1 == 1
-	extension := (firstByte>>4)&1 == 1
-	CSRCCnt := int(firstByte & 0x0f)
-	SequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
-	timestamp := int64(binary.BigEndian.Uint32(content[8:16]))
-
-	if isRTCPPacket(content) {
-		client.Println("skipping RTCP packet")
-		return nil, false
-	}
-
-	offset := RTPHeaderSize
-
-	end := len(content)
-	if end-offset >= 4*CSRCCnt {
-		offset += 4 * CSRCCnt
-	}
-	if extension && len(content) < 4+offset+2+2 {
-		return nil, false
-	}
-	if extension && end-offset >= 4 {
-		extLen := 4 * int(binary.BigEndian.Uint16(content[4+offset+2:]))
-		offset += 4
-		if end-offset >= extLen {
-			offset += extLen
-		}
-	}
-	if padding && end-offset > 0 {
-		paddingLen := int(content[end-1])
-		if end-offset >= paddingLen {
-			end -= paddingLen
-		}
-	}
-	offset += 4
-	switch int(content[1]) {
-	case client.videoID:
-		if client.PreVideoTS == 0 {
-			client.PreVideoTS = timestamp
-		}
-		if timestamp-client.PreVideoTS < 0 {
-			if math.MaxUint32-client.PreVideoTS < 90*100 { //100 ms
-				client.PreVideoTS = 0
-				client.PreVideoTS -= (math.MaxUint32 - client.PreVideoTS)
-			} else {
-				client.PreVideoTS = 0
-			}
-		}
-		if client.PreSequenceNumber != 0 && SequenceNumber-client.PreSequenceNumber != 1 {
-			client.Println("drop packet", SequenceNumber-1)
-		}
-		client.PreSequenceNumber = SequenceNumber
-		if client.BufferRtpPacket.Len() > 4048576 {
-			client.Println("Big Buffer Flush")
-			client.BufferRtpPacket.Truncate(0)
-			client.BufferRtpPacket.Reset()
-		}
-		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
-		if len(nalRaw) == 0 || len(nalRaw[0]) == 0 {
-			return nil, false
-		}
-		var retmap []*av.Packet
-		for _, nal := range nalRaw {
-			if client.videoCodec == av.H265 {
-				naluType := (nal[0] >> 1) & 0x3f
-				switch naluType {
-				case h265parser.NAL_UNIT_CODED_SLICE_TRAIL_R:
-					retmap = append(retmap, &av.Packet{
-						Data:            append(binSize(len(nal)), nal...),
-						CompositionTime: time.Duration(1) * time.Millisecond,
-						Idx:             client.videoIDX,
-						IsKeyFrame:      false,
-						Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-						Time:            time.Duration(timestamp/90) * time.Millisecond,
-					})
-				case h265parser.NAL_UNIT_VPS:
-					client.CodecUpdateVPS(nal)
-				case h265parser.NAL_UNIT_SPS:
-					client.CodecUpdateSPS(nal)
-				case h265parser.NAL_UNIT_PPS:
-					client.CodecUpdatePPS(nal)
-				case h265parser.NAL_UNIT_UNSPECIFIED_49:
-					se := nal[2] >> 6
-					naluType := nal[2] & 0x3f
-					if se == 2 {
-						client.BufferRtpPacket.Truncate(0)
-						client.BufferRtpPacket.Reset()
-						client.BufferRtpPacket.Write([]byte{(nal[0] & 0x81) | (naluType << 1), nal[1]})
-						r := make([]byte, 2)
-						r[1] = nal[1]
-						r[0] = (nal[0] & 0x81) | (naluType << 1)
-						client.BufferRtpPacket.Write(nal[3:])
-					} else if se == 1 {
-						client.BufferRtpPacket.Write(nal[3:])
-						retmap = append(retmap, &av.Packet{
-							Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
-							CompositionTime: time.Duration(1) * time.Millisecond,
-							Idx:             client.videoIDX,
-							IsKeyFrame:      naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL,
-							Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-							Time:            time.Duration(timestamp/90) * time.Millisecond,
-						})
-					} else {
-						client.BufferRtpPacket.Write(nal[3:])
-					}
-				default:
-					//client.Println("Unsupported Nal", naluType)
-				}
-
-			} else if client.videoCodec == av.H264 {
-				naluType := nal[0] & 0x1f
-				switch {
-				case naluType >= 1 && naluType <= 5:
-					retmap = append(retmap, &av.Packet{
-						Data:            append(binSize(len(nal)), nal...),
-						CompositionTime: time.Duration(1) * time.Millisecond,
-						Idx:             client.videoIDX,
-						IsKeyFrame:      naluType == 5,
-						Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-						Time:            time.Duration(timestamp/90) * time.Millisecond,
-					})
-				case naluType == 7:
-					client.CodecUpdateSPS(nal)
-				case naluType == 8:
-					client.CodecUpdatePPS(nal)
-				case naluType == 24:
-					packet := nal[1:]
-					for len(packet) >= 2 {
-						size := int(packet[0])<<8 | int(packet[1])
-						if size+2 > len(packet) {
-							break
-						}
-						naluTypefs := packet[2] & 0x1f
-						switch {
-						case naluTypefs >= 1 && naluTypefs <= 5:
-							retmap = append(retmap, &av.Packet{
-								Data:            append(binSize(len(packet[2:size+2])), packet[2:size+2]...),
-								CompositionTime: time.Duration(1) * time.Millisecond,
-								Idx:             client.videoIDX,
-								IsKeyFrame:      naluType == 5,
-								Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-								Time:            time.Duration(timestamp/90) * time.Millisecond,
-							})
-						case naluTypefs == 7:
-							client.CodecUpdateSPS(packet[2 : size+2])
-						case naluTypefs == 8:
-							client.CodecUpdatePPS(packet[2 : size+2])
-						}
-						packet = packet[size+2:]
-					}
-				case naluType == 28:
-					fuIndicator := content[offset]
-					fuHeader := content[offset+1]
-					isStart := fuHeader&0x80 != 0
-					isEnd := fuHeader&0x40 != 0
-					if isStart {
-						client.fuStarted = true
-						client.BufferRtpPacket.Truncate(0)
-						client.BufferRtpPacket.Reset()
-						client.BufferRtpPacket.Write([]byte{fuIndicator&0xe0 | fuHeader&0x1f})
-					}
-					if client.fuStarted {
-						client.BufferRtpPacket.Write(content[offset+2 : end])
-						if isEnd {
-							client.fuStarted = false
-							naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
-							if naluTypef == 7 || naluTypef == 9 {
-								bufered, _ := h264parser.SplitNALUs(append([]byte{0, 0, 0, 1}, client.BufferRtpPacket.Bytes()...))
-								for _, v := range bufered {
-									naluTypefs := v[0] & 0x1f
-									switch {
-									case naluTypefs == 5:
-										client.BufferRtpPacket.Reset()
-										client.BufferRtpPacket.Write(v)
-										naluTypef = 5
-									case naluTypefs == 7:
-										client.CodecUpdateSPS(v)
-									case naluTypefs == 8:
-										client.CodecUpdatePPS(v)
-									}
-								}
-							}
-							retmap = append(retmap, &av.Packet{
-								Data:            append(binSize(client.BufferRtpPacket.Len()), client.BufferRtpPacket.Bytes()...),
-								CompositionTime: time.Duration(1) * time.Millisecond,
-								Duration:        time.Duration(float32(timestamp-client.PreVideoTS)/90) * time.Millisecond,
-								Idx:             client.videoIDX,
-								IsKeyFrame:      naluTypef == 5,
-								Time:            time.Duration(timestamp/90) * time.Millisecond,
-							})
-						}
-					}
-				default:
-					client.Println("Unsupported NAL Type", naluType)
-				}
-			}
-		}
-		if len(retmap) > 0 {
-			client.PreVideoTS = timestamp
-			return retmap, true
-		}
-	case client.audioID:
-		if client.PreAudioTS == 0 {
-			client.PreAudioTS = timestamp
-		}
-		nalRaw, _ := h264parser.SplitNALUs(content[offset:end])
-		var retmap []*av.Packet
-		for _, nal := range nalRaw {
-			var duration time.Duration
-			switch client.audioCodec {
-			case av.PCM_MULAW:
-				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-				client.AudioTimeLine += duration
-				retmap = append(retmap, &av.Packet{
-					Data:            nal,
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Duration:        duration,
-					Idx:             client.audioIDX,
-					IsKeyFrame:      false,
-					Time:            client.AudioTimeLine,
-				})
-			case av.PCM_ALAW:
-				duration = time.Duration(len(nal)) * time.Second / time.Duration(client.AudioTimeScale)
-				client.AudioTimeLine += duration
-				retmap = append(retmap, &av.Packet{
-					Data:            nal,
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Duration:        duration,
-					Idx:             client.audioIDX,
-					IsKeyFrame:      false,
-					Time:            client.AudioTimeLine,
-				})
-			case av.OPUS:
-				duration = time.Duration(20) * time.Millisecond
-				client.AudioTimeLine += duration
-				retmap = append(retmap, &av.Packet{
-					Data:            nal,
-					CompositionTime: time.Duration(1) * time.Millisecond,
-					Duration:        duration,
-					Idx:             client.audioIDX,
-					IsKeyFrame:      false,
-					Time:            client.AudioTimeLine,
-				})
-			case av.AAC:
-				auHeadersLength := uint16(0) | (uint16(nal[0]) << 8) | uint16(nal[1])
-				auHeadersCount := auHeadersLength >> 4
-				framesPayloadOffset := 2 + int(auHeadersCount)<<1
-				auHeaders := nal[2:framesPayloadOffset]
-				framesPayload := nal[framesPayloadOffset:]
-				for i := 0; i < int(auHeadersCount); i++ {
-					auHeader := uint16(0) | (uint16(auHeaders[0]) << 8) | uint16(auHeaders[1])
-					frameSize := auHeader >> 3
-					frame := framesPayload[:frameSize]
-					auHeaders = auHeaders[2:]
-					framesPayload = framesPayload[frameSize:]
-					if _, _, _, _, err := aacparser.ParseADTSHeader(frame); err == nil {
-						frame = frame[7:]
-					}
-					duration = time.Duration((float32(1024)/float32(client.AudioTimeScale))*1000*1000*1000) * time.Nanosecond
-					client.AudioTimeLine += duration
-					retmap = append(retmap, &av.Packet{
-						Data:            frame,
-						CompositionTime: time.Duration(1) * time.Millisecond,
-						Duration:        duration,
-						Idx:             client.audioIDX,
-						IsKeyFrame:      false,
-						Time:            client.AudioTimeLine,
-					})
-				}
-			}
-		}
-		if len(retmap) > 0 {
-			client.PreAudioTS = timestamp
-			return retmap, true
-		}
-	default:
-		//client.Println("Unsuported Intervaled data packet", int(content[1]), content[offset:end])
-	}
-	return nil, false
-}
-
 func (client *RTSPClient) CodecUpdateSPS(val []byte) {
 	if client.videoCodec != av.H264 && client.videoCodec != av.H265 {
 		return
@@ -945,14 +667,14 @@ func (client *RTSPClient) CodecUpdateVPS(val []byte) {
 
 }
 
-//Println mini logging functions
+// Println mini logging functions
 func (client *RTSPClient) Println(v ...interface{}) {
 	if client.options.Debug {
 		log.Println(v)
 	}
 }
 
-//binSize
+// binSize
 func binSize(val int) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(val))

@@ -36,7 +36,7 @@ type FilterDemuxer struct {
 	audioidx int
 }
 
-func (self FilterDemuxer) ReadPacket() (pkt av.Packet, err error) {
+func (self *FilterDemuxer) ReadPacket() (pkt av.Packet, err error) {
 	if self.streams == nil {
 		if self.streams, err = self.Demuxer.Streams(); err != nil {
 			return
@@ -167,6 +167,20 @@ func (self *AVSync) check(i int) (start time.Duration, end time.Duration, correc
 	start = self.time[minidx]
 	end = start + self.MaxTimeDiff
 	correcttime = start + time.Millisecond*40
+	return
+}
+
+type CalcDuration struct {
+	LastTime map[int8]time.Duration
+}
+
+func (self *CalcDuration) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	if tmp, ok := self.LastTime[pkt.Idx]; ok && tmp != 0 {
+		pkt.Duration = pkt.Time - self.LastTime[pkt.Idx]
+	} else if pkt.Time < 100*time.Millisecond {
+		pkt.Duration = pkt.Time
+	}
+	self.LastTime[pkt.Idx] = pkt.Time
 	return
 }
 

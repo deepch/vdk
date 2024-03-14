@@ -36,6 +36,7 @@ const (
 	ElementaryStreamTypeH264                = 0x1B
 	ElementaryStreamTypeAdtsAAC             = 0x0F
 	ElementaryStreamTypeAlignmentDescriptor = 0x06
+	ElementaryStreamTypeH265                = 0x24
 )
 
 type PATEntry struct {
@@ -516,7 +517,7 @@ func NewTSWriter(pid uint16) *TSWriter {
 	return w
 }
 
-//TSHeader func
+// TSHeader func
 type TSHeader struct {
 	PID                    uint
 	PCR                    uint64
@@ -528,7 +529,7 @@ type TSHeader struct {
 	HeaderLength           uint
 }
 
-//WriteTSHeader func
+// WriteTSHeader func
 func WriteTSHeader(w io.Writer, element TSHeader, dataLength int) (written int, err error) {
 	var flags, extFlags uint
 
@@ -688,13 +689,13 @@ func makeRepeatValBytes(val byte, n int) []byte {
 	return b
 }
 
-//WriteRepeatVal func
+// WriteRepeatVal func
 func WriteRepeatVal(w io.Writer, val byte, n int) (err error) {
 	_, err = w.Write(makeRepeatValBytes(val, n))
 	return
 }
 
-//WriteUInt64 func
+// WriteUInt64 func
 func WriteUInt64(w io.Writer, val uint64, n int) (err error) {
 	var b [8]byte
 	for i := n - 1; i >= 0; i-- {
@@ -707,12 +708,12 @@ func WriteUInt64(w io.Writer, val uint64, n int) (err error) {
 	return
 }
 
-//WriteUInt func
+// WriteUInt func
 func WriteUInt(w io.Writer, val uint, n int) (err error) {
 	return WriteUInt64(w, uint64(val), n)
 }
 
-//PCRToUInt func
+// PCRToUInt func
 func PCRToUInt(pcr uint64) uint64 {
 	base := pcr / 300
 	ext := pcr % 300

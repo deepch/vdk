@@ -25,6 +25,7 @@ type ProxyConn struct {
 	cseq     int
 	session  string
 	protocol int
+	in       int
 }
 
 type Proxy struct {
@@ -40,7 +41,6 @@ func NewProxyConn(netconn net.Conn) *ProxyConn {
 	conn.writebuf = make([]byte, 4096)
 	conn.readbuf = make([]byte, 4096)
 	conn.session = uuid.New().String()
-	conn.cseq = 1
 	return conn
 }
 
@@ -156,6 +156,7 @@ func (self *ProxyConn) prepare() error {
 		return errors.New("no fist cmd")
 	}
 
+	cseq := strings.TrimSpace(stringInBetween(string(self.readbuf[:n]), "CSeq:", "\r\n"))
 	switch fistStringsSlice[0] {
 	case OPTIONS:
 
@@ -165,45 +166,46 @@ func (self *ProxyConn) prepare() error {
 		if self.URL, err = url.Parse(fistStringsSlice[1]); err != nil {
 			return err
 		}
-		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nPublic: OPTIONS, DESCRIBE, SETUP, PLAY\r\nSession: " + self.session + "\r\nCSeq: " + strconv.Itoa(self.cseq) + "\r\n\r\n"))
+		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nPublic: OPTIONS, DESCRIBE, SETUP, PLAY\r\nSession: " + self.session + "\r\nCSeq: " + cseq + "\r\n\r\n"))
 		if err != nil {
 			return err
 		}
 		self.options = true
 
 	case SETUP:
-
 		if strings.Contains(string(self.readbuf[:n]), "RTP/AVP/UDP") {
-			_, err := self.netconn.Write([]byte("RTSP/1.0 461 Unsupported transport\r\nCSeq: " + strconv.Itoa(self.cseq) + "\r\nSession: " + self.session + "\r\n\r\n"))
+			_, err := self.netconn.Write([]byte("RTSP/1.0 461 Unsupported transport\r\nCSeq: " + cseq + "\r\nSession: " + self.session + "\r\n\r\n"))
 			if err != nil {
 				return err
 			}
 			return nil
 		}
-		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nCSeq: " + strconv.Itoa(self.cseq) + "\r\nSession: " + self.session + "\r\nTransport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n\r\n"))
+		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nCSeq: " + cseq + "\r\nSession: " + self.session + "\r\nTransport: RTP/AVP/TCP;unicast;interleaved=" + strconv.Itoa(self.in) + "-" + strconv.Itoa(self.in+1) + "\r\n\r\n"))
 		if err != nil {
 			return err
 		}
-
+		self.in = self.in + 2
 	case DESCRIBE:
 
-		buf := "RTSP/1.0 200 OK\r\nContent-Type: application/sdp\r\nSession: " + self.session + "\r\nContent-Length: " + strconv.Itoa(len(self.sdp)) + "\r\nCSeq: " + strconv.Itoa(self.cseq) + "\r\n\r\n"
+		buf := "RTSP/1.0 200 OK\r\nContent-Type: application/sdp\r\nSession: " + self.session + "\r\nContent-Length: " + strconv.Itoa(len(self.sdp)) + "\r\nCSeq: " + cseq + "\r\n\r\n"
 		_, err := self.netconn.Write([]byte(buf + string(self.sdp)))
 		if err != nil {
 			return err
 		}
 
 	case PLAY:
-
-		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nSession: " + self.session + ";timeout=60\r\nCSeq: " + strconv.Itoa(self.cseq) + "\r\n\r\n"))
+		_, err := self.netconn.Write([]byte("RTSP/1.0 200 OK\r\nSession: " + self.session + ";timeout=60\r\nCSeq: " + cseq + "\r\n\r\n"))
 		if err != nil {
 			return err
 		}
 		self.playing = true
+	case TEARDOWN:
+		self.netconn.Close()
+		return errors.New("exit")
 
 	default:
 
-		return errors.New("metod not found")
+		return errors.New("metod not found " + fistStringsSlice[0])
 
 	}
 	return nil
