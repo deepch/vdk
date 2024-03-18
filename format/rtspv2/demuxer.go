@@ -286,9 +286,6 @@ func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, dur
 }
 
 func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
-	if client.timestamp-client.PreVideoTS == 0 {
-		client.Println("Duration is 0", client.timestamp, client.PreVideoTS)
-	}
 	return append(retmap, &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
