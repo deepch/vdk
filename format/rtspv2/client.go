@@ -514,6 +514,7 @@ func (client *RTSPClient) Pause() error {
 		return err
 	}
 	client.status = PAUSE
+	return nil
 }
 
 func (client *RTSPClient) Play(customHeaders map[string]string) error {
@@ -521,6 +522,16 @@ func (client *RTSPClient) Play(customHeaders map[string]string) error {
 		return err
 	}
 	client.status = PLAY
+	return nil
+}
+
+func (client *RTSPClient) Seek(customHeaders map[string]string, target int64) error {
+	customHeaders["Range"] = fmt.Sprintf("npt=%d.00-", target)
+	if err := client.request(PLAY, customHeaders, client.pURL.String(), false, true); err != nil {
+		return err
+	}
+	client.status = PLAY
+	return nil
 }
 
 func (client *RTSPClient) Close() {

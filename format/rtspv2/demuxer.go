@@ -2,6 +2,7 @@ package rtspv2
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"time"
 
@@ -16,22 +17,40 @@ const (
 	TimeDelay      = 1
 )
 
+func (client *RTSPClient) containsPayloadType(pt int) bool {
+	var exist bool
+	for _, sdp := range client.mediaSDP {
+		if sdp.Rtpmap == pt {
+			exist = true
+		}
+	}
+	return exist
+}
+
 func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	content := *payloadRAW
 	firstByte := content[4]
 	padding := (firstByte>>5)&1 == 1
 	extension := (firstByte>>4)&1 == 1
 	CSRCCnt := int(firstByte & 0x0f)
-	client.sequenceNumber = int(binary.BigEndian.Uint16(content[6:8]))
-	client.timestamp = int64(binary.BigEndian.Uint32(content[8:16]))
-
+	payloadType := int(content[5] & 0x7f)
+	sequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
+	timestamp := int64(binary.BigEndian.Uint32(content[8:12]))
 	if isRTCPPacket(content) {
 		client.Println("skipping RTCP packet")
 		return nil, false
 	}
 
-	client.offset = RTPHeaderSize
+	if !client.containsPayloadType(payloadType) {
+		client.Println("skipping RTP packet")
+		return nil, false
+	}
 
+	client.Println(fmt.Sprintf("padding: %v, extension: %v, csrccnt: %d, sequence number: %d.payload type: %d, timestamp: %d",
+		padding, extension, CSRCCnt, sequenceNumber, payloadType, timestamp))
+	client.offset = RTPHeaderSize
+	client.sequenceNumber = sequenceNumber
+	client.timestamp = timestamp
 	client.end = len(content)
 	if client.end-client.offset >= 4*CSRCCnt {
 		client.offset += 4 * CSRCCnt
@@ -78,9 +97,9 @@ func (client *RTSPClient) handleVideo(content []byte) ([]*av.Packet, bool) {
 			client.PreVideoTS = 0
 		}
 	}
-	// if client.PreSequenceNumber != 0 && client.sequenceNumber-client.PreSequenceNumber != 1 {
-	// 	client.Println("drop packet", client.sequenceNumber-1)
-	// }
+	if client.PreSequenceNumber != 0 && client.sequenceNumber-client.PreSequenceNumber != 1 {
+		client.Println("drop packet", client.sequenceNumber-1)
+	}
 	client.PreSequenceNumber = client.sequenceNumber
 	if client.BufferRtpPacket.Len() > 4048576 {
 		client.Println("Big Buffer Flush")
@@ -89,6 +108,7 @@ func (client *RTSPClient) handleVideo(content []byte) ([]*av.Packet, bool) {
 	}
 	nalRaw, _ := h264parser.SplitNALUs(content[client.offset:client.end])
 	if len(nalRaw) == 0 || len(nalRaw[0]) == 0 {
+		client.Println("nal Raw 0", nalRaw)
 		return nil, false
 	}
 	var retmap []*av.Packet
@@ -266,6 +286,9 @@ func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, dur
 }
 
 func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	if client.timestamp-client.PreVideoTS == 0 {
+		client.Println("Duration is 0", client.timestamp, client.PreVideoTS)
+	}
 	return append(retmap, &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
