@@ -2,7 +2,6 @@ package rtspv2
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -42,12 +41,12 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	}
 
 	if !client.containsPayloadType(payloadType) {
-		client.Println("skipping RTP packet")
+		client.Println("skipping RTP packet, paytload type: %d ", payloadType)
 		return nil, false
 	}
 
-	client.Println(fmt.Sprintf("padding: %v, extension: %v, csrccnt: %d, sequence number: %d.payload type: %d, timestamp: %d",
-		padding, extension, CSRCCnt, sequenceNumber, payloadType, timestamp))
+	// client.Println(fmt.Sprintf("padding: %v, extension: %v, csrccnt: %d, sequence number: %d.payload type: %d, timestamp: %d",
+	// 	padding, extension, CSRCCnt, sequenceNumber, payloadType, timestamp))
 	client.offset = RTPHeaderSize
 	client.sequenceNumber = sequenceNumber
 	client.timestamp = timestamp
