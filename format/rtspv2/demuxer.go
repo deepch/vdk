@@ -2,6 +2,7 @@ package rtspv2
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"time"
 
@@ -41,7 +42,7 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	}
 
 	if !client.containsPayloadType(payloadType) {
-		client.Println("skipping RTP packet, paytload type: %d ", payloadType)
+		client.Println(fmt.Sprintf("skipping RTP packet, paytload type: %v", payloadType))
 		return nil, false
 	}
 
