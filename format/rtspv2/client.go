@@ -97,7 +97,12 @@ type RTSPClient struct {
 	sequenceNumber      int
 	end                 int
 	offset              int
+	realVideoTs         int64
+	keyFrameRealVideoTs int64
+	keyFrameIterateDrua int64
+	preDuration         time.Duration
 	status              string
+	lastPausedTime      time.Time
 }
 
 type RTSPClientOptions struct {
@@ -266,7 +271,6 @@ func (client *RTSPClient) startStream() {
 	timer := time.Now()
 	oneb := make([]byte, 1)
 	header := make([]byte, 4)
-	var fixed bool
 	for {
 		err := client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 		if err != nil {
@@ -281,18 +285,19 @@ func (client *RTSPClient) startStream() {
 			}
 			timer = time.Now()
 		}
-		if client.status == PAUSE {
-			// client.Println("RTSP Client PAUSE")
-			continue
-		}
-		if !fixed {
-			nb, err := io.ReadFull(client.connRW, header)
-			if err != nil || nb != 4 {
-				client.Println("RTSP Client RTP Read Header", err)
-				return
+
+		nb, err := io.ReadFull(client.connRW, header)
+		if err != nil || nb != 4 {
+			if client.status == PAUSE && strings.Contains(err.Error(), "timeout") {
+				if time.Since(client.lastPausedTime) >= time.Second*300 {
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
+			client.Println("RTSP Client RTP Read Header", err)
+			return
 		}
-		fixed = false
 		switch header[0] {
 		case 0x24:
 			length := int32(binary.BigEndian.Uint16(header[2:]))
@@ -514,6 +519,7 @@ func (client *RTSPClient) Pause() error {
 		return err
 	}
 	client.status = PAUSE
+	client.lastPausedTime = time.Now()
 	return nil
 }
 
@@ -531,6 +537,7 @@ func (client *RTSPClient) Seek(customHeaders map[string]string, target int64) er
 		return err
 	}
 	client.status = PLAY
+	client.PreVideoTS = 0
 	return nil
 }
 

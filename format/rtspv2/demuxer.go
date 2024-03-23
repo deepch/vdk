@@ -2,7 +2,6 @@ package rtspv2
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -27,6 +26,15 @@ func (client *RTSPClient) containsPayloadType(pt int) bool {
 	return exist
 }
 
+func (client *RTSPClient) durationFromSDP() time.Duration {
+	for _, sdp := range client.mediaSDP {
+		if sdp.AVType == VIDEO && sdp.FPS != 0 {
+			return time.Duration((int(1000) / sdp.FPS) * int(time.Millisecond))
+		}
+	}
+	return 0
+}
+
 func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	content := *payloadRAW
 	firstByte := content[4]
@@ -36,18 +44,18 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	payloadType := int(content[5] & 0x7f)
 	sequenceNumber := int(binary.BigEndian.Uint16(content[6:8]))
 	timestamp := int64(binary.BigEndian.Uint32(content[8:12]))
+	// SSRC := binary.BigEndian.Uint32(content[12:16])
 	if isRTCPPacket(content) {
 		client.Println("skipping RTCP packet")
 		return nil, false
 	}
 
 	if !client.containsPayloadType(payloadType) {
-		client.Println(fmt.Sprintf("skipping RTP packet, paytload type: %v", payloadType))
+		// client.Println(fmt.Sprintf("skipping RTP packet, paytload type: %v", payloadType))
 		return nil, false
 	}
 
-	// client.Println(fmt.Sprintf("padding: %v, extension: %v, csrccnt: %d, sequence number: %d.payload type: %d, timestamp: %d",
-	// 	padding, extension, CSRCCnt, sequenceNumber, payloadType, timestamp))
+	// client.Println(fmt.Sprintf("padding: %v, extension: %v, csrccnt: %d, sequence number: %d.payload type: %d, timestamp: %d", padding, extension, CSRCCnt, sequenceNumber, payloadType, timestamp))
 	client.offset = RTPHeaderSize
 	client.sequenceNumber = sequenceNumber
 	client.timestamp = timestamp
@@ -58,13 +66,18 @@ func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	if extension && len(content) < 4+client.offset+2+2 {
 		return nil, false
 	}
+	var realTimestamp int64
 	if extension && client.end-client.offset >= 4 {
-		extLen := 4 * int(binary.BigEndian.Uint16(content[4+client.offset+2:]))
-		client.offset += 4
+		extWords := int(binary.BigEndian.Uint16(content[4+client.offset+2:]))
+		extLen := 4 * extWords
+		client.offset += 4 // this is profile(2 byte) + ext length(2 byte)
+		realTimestamp = int64(binary.BigEndian.Uint32(content[client.offset+4 : client.offset+4*2]))
 		if client.end-client.offset >= extLen {
 			client.offset += extLen
 		}
 	}
+	client.realVideoTs = realTimestamp
+
 	if padding && client.end-client.offset > 0 {
 		paddingLen := int(content[client.end-1])
 		if client.end-client.offset >= paddingLen {
@@ -286,12 +299,31 @@ func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, dur
 }
 
 func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	duration := time.Duration(float32(client.timestamp-client.PreVideoTS)/TimeBaseFactor) * time.Millisecond
+	sdpDuration := client.durationFromSDP()
+	if sdpDuration != 0 && duration > sdpDuration {
+		duration = sdpDuration
+	}
+	if duration == 0 {
+		duration = client.preDuration
+	}
+	client.preDuration = duration
+	if isKeyFrame {
+		client.keyFrameRealVideoTs = client.realVideoTs
+		client.keyFrameIterateDrua = 0
+	} else {
+		client.keyFrameIterateDrua += duration.Milliseconds()
+	}
+	realVideoMs := client.keyFrameRealVideoTs * 1000
+
+	realVideoMs += client.keyFrameIterateDrua
 	return append(retmap, &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
 		Idx:             client.videoIDX,
 		IsKeyFrame:      isKeyFrame,
-		Duration:        time.Duration(float32(client.timestamp-client.PreVideoTS)/TimeBaseFactor) * time.Millisecond,
+		Duration:        duration,
 		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
+		RealTimestamp:   realVideoMs,
 	})
 }

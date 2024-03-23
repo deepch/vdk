@@ -106,6 +106,20 @@ func (self *Queue) WritePacket(pkt av.Packet) (err error) {
 	return
 }
 
+func (self *Queue) Clean() {
+	self.lock.Lock()
+	for self.buf.Count > 1 {
+		pkt := self.buf.Pop()
+		if pkt.Idx == int8(self.videoidx) && pkt.IsKeyFrame {
+			self.curgopcount--
+		}
+		if self.curgopcount < self.maxgopcount {
+			break
+		}
+	}
+	self.lock.Unlock()
+}
+
 type QueueCursor struct {
 	que    *Queue
 	pos    pktque.BufPos
