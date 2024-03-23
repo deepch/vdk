@@ -191,7 +191,7 @@ const avCodecTypeMagic = 233333
 // CodecData is some important bytes for initializing audio/video decoder,
 // can be converted to VideoCodecData or AudioCodecData using:
 //
-//     codecdata.(AudioCodecData) or codecdata.(VideoCodecData)
+//	codecdata.(AudioCodecData) or codecdata.(VideoCodecData)
 //
 // for H264, CodecData is AVCDecoderConfigure bytes, includes SPS/PPS.
 type CodecData interface {
@@ -253,8 +253,9 @@ type Packet struct {
 	Idx             int8          // stream index in container format
 	CompositionTime time.Duration // packet presentation time minus decode time for H264 B-Frame
 	Time            time.Duration // packet decode time
-	Duration        time.Duration //packet duration
+	Duration        time.Duration // packet duration
 	Data            []byte        // packet data
+	RealTimestamp   int64 // packet real timestamp (ms)
 }
 
 // Raw audio frame.
@@ -266,33 +267,33 @@ type AudioFrame struct {
 	Data          [][]byte      // data array for planar format len(Data) > 1
 }
 
-func (self AudioFrame) Duration() time.Duration {
-	return time.Second * time.Duration(self.SampleCount) / time.Duration(self.SampleRate)
+func (af AudioFrame) Duration() time.Duration {
+	return time.Second * time.Duration(af.SampleCount) / time.Duration(af.SampleRate)
 }
 
 // Check this audio frame has same format as other audio frame.
-func (self AudioFrame) HasSameFormat(other AudioFrame) bool {
-	if self.SampleRate != other.SampleRate {
+func (af AudioFrame) HasSameFormat(other AudioFrame) bool {
+	if af.SampleRate != other.SampleRate {
 		return false
 	}
-	if self.ChannelLayout != other.ChannelLayout {
+	if af.ChannelLayout != other.ChannelLayout {
 		return false
 	}
-	if self.SampleFormat != other.SampleFormat {
+	if af.SampleFormat != other.SampleFormat {
 		return false
 	}
 	return true
 }
 
 // Split sample audio sample from this frame.
-func (self AudioFrame) Slice(start int, end int) (out AudioFrame) {
+func (af AudioFrame) Slice(start int, end int) (out AudioFrame) {
 	if start > end {
 		panic(fmt.Sprintf("av: AudioFrame split failed start=%d end=%d invalid", start, end))
 	}
-	out = self
+	out = af
 	out.Data = append([][]byte(nil), out.Data...)
 	out.SampleCount = end - start
-	size := self.SampleFormat.BytesPerSample()
+	size := af.SampleFormat.BytesPerSample()
 	for i := range out.Data {
 		out.Data[i] = out.Data[i][start*size : end*size]
 	}
@@ -300,8 +301,8 @@ func (self AudioFrame) Slice(start int, end int) (out AudioFrame) {
 }
 
 // Concat two audio frames.
-func (self AudioFrame) Concat(in AudioFrame) (out AudioFrame) {
-	out = self
+func (af AudioFrame) Concat(in AudioFrame) (out AudioFrame) {
+	out = af
 	out.Data = append([][]byte(nil), out.Data...)
 	out.SampleCount += in.SampleCount
 	for i := range out.Data {

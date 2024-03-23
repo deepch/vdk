@@ -85,6 +85,8 @@ func Parse(content string) (sess Session, medias []Media) {
 								media.Rtpmap, _ = strconv.Atoi(val)
 							case "x-framerate":
 								media.FPS, _ = strconv.Atoi(val)
+							case "framerate":
+								media.FPS, _ = strconv.Atoi(val)
 							}
 						}
 						keyval = strings.Split(field, "/")
