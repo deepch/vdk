@@ -299,6 +299,7 @@ func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, dur
 }
 
 func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	var realVideoMs int64
 	duration := time.Duration(float32(client.timestamp-client.PreVideoTS)/TimeBaseFactor) * time.Millisecond
 	sdpDuration := client.durationFromSDP()
 	if sdpDuration != 0 && duration > sdpDuration {
@@ -314,9 +315,11 @@ func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isK
 	} else {
 		client.keyFrameIterateDrua += duration.Milliseconds()
 	}
-	realVideoMs := client.keyFrameRealVideoTs * 1000
+	if client.realVideoTs != 0 {
+		realVideoMs = client.keyFrameRealVideoTs * 1000
+		realVideoMs += client.keyFrameIterateDrua
+	}
 
-	realVideoMs += client.keyFrameIterateDrua
 	return append(retmap, &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
