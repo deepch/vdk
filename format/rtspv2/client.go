@@ -119,8 +119,8 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	client := &RTSPClient{
 		headers:             make(map[string]string),
 		Signals:             make(chan int, 100),
-		OutgoingProxyQueue:  make(chan *[]byte, 300),
-		OutgoingPacketQueue: make(chan *av.Packet, 300),
+		OutgoingProxyQueue:  make(chan *[]byte, 3000),
+		OutgoingPacketQueue: make(chan *av.Packet, 3000),
 		BufferRtpPacket:     bytes.NewBuffer([]byte{}),
 		videoID:             -1,
 		audioID:             -2,
@@ -331,7 +331,7 @@ func (client *RTSPClient) startStream() {
 			}
 
 			for _, i2 := range pkt {
-				if len(client.OutgoingPacketQueue) > 200 {
+				if len(client.OutgoingPacketQueue) > 2000 {
 					client.Println("RTSP Client OutgoingPacket Chanel Full")
 					return
 				}
