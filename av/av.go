@@ -255,7 +255,8 @@ type Packet struct {
 	Time            time.Duration // packet decode time
 	Duration        time.Duration // packet duration
 	Data            []byte        // packet data
-	RealTimestamp   int64 // packet real timestamp (ms)
+	RealTimestamp   int64         // packet real time (ms)
+	RealTs          int64         // packet real time (s)
 }
 
 // Raw audio frame.

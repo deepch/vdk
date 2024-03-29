@@ -26,14 +26,14 @@ func (client *RTSPClient) containsPayloadType(pt int) bool {
 	return exist
 }
 
-func (client *RTSPClient) durationFromSDP() time.Duration {
-	for _, sdp := range client.mediaSDP {
-		if sdp.AVType == VIDEO && sdp.FPS != 0 {
-			return time.Duration((int(1000) / sdp.FPS) * int(time.Millisecond))
-		}
-	}
-	return 0
-}
+// func (client *RTSPClient) durationFromSDP() time.Duration {
+// 	for _, sdp := range client.mediaSDP {
+// 		if sdp.AVType == VIDEO && sdp.FPS != 0 {
+// 			return time.Duration((int(1000) / sdp.FPS) * int(time.Millisecond))
+// 		}
+// 	}
+// 	return 0
+// }
 
 func (client *RTSPClient) RTPDemuxer(payloadRAW *[]byte) ([]*av.Packet, bool) {
 	content := *payloadRAW
@@ -299,34 +299,91 @@ func (client *RTSPClient) appendAudioPacket(retmap []*av.Packet, nal []byte, dur
 }
 
 func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
-	var realVideoMs int64
-	duration := time.Duration(float32(client.timestamp-client.PreVideoTS)/TimeBaseFactor) * time.Millisecond
-	sdpDuration := client.durationFromSDP()
-	if sdpDuration != 0 && duration > sdpDuration {
-		duration = sdpDuration
-	}
-	if duration == 0 {
-		duration = client.preDuration
-	}
-	client.preDuration = duration
-	if isKeyFrame {
-		client.keyFrameRealVideoTs = client.realVideoTs
-		client.keyFrameIterateDrua = 0
-	} else {
-		client.keyFrameIterateDrua += duration.Milliseconds()
-	}
+	// Playback has real video ts
 	if client.realVideoTs != 0 {
-		realVideoMs = client.keyFrameRealVideoTs * 1000
-		realVideoMs += client.keyFrameIterateDrua
+		return client.appendPlaybackVideoPacket(retmap, nal, isKeyFrame)
+	} else {
+		// LiveView
+		return client.appendLiveViewVideoPacket(retmap, nal, isKeyFrame)
 	}
+}
 
-	return append(retmap, &av.Packet{
+func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	prePkt := client.PrePacket
+	curPkt := &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
 		Idx:             client.videoIDX,
 		IsKeyFrame:      isKeyFrame,
-		Duration:        duration,
+		Duration:        client.PreDuration,
 		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
-		RealTimestamp:   realVideoMs,
+		RealTimestamp:   0,
+		RealTs:          client.realVideoTs,
+	}
+	client.PrePacket = append(retmap, curPkt)
+	if len(prePkt) == 0 {
+		return nil
+	} else {
+		var prePktTime time.Duration
+		lenPrePkt := len(prePkt)
+		for i := lenPrePkt - 1; i >= 0; i-- {
+			prePktTime = prePkt[i].Time
+			if i+1 == lenPrePkt {
+				prePkt[i].Duration = time.Duration(client.timestamp/TimeBaseFactor)*time.Millisecond - prePkt[i].Time
+			} else {
+				prePkt[i].Duration = (prePkt[i].Time - prePktTime) * time.Millisecond
+			}
+			client.PreDuration = prePkt[i].Duration
+
+			if prePkt[i].IsKeyFrame {
+				if prePkt[i].RealTs == client.preRealVideoMs/1000 {
+					client.iterateDruation += prePkt[i].Duration
+				} else {
+					client.iterateDruation = 0
+					client.preKeyRealVideoTs = prePkt[i].RealTs
+				}
+			} else {
+				client.iterateDruation += prePkt[i].Duration
+			}
+
+			prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
+			client.preRealVideoMs = prePkt[i].RealTimestamp
+			// fmt.Println("playback duration", prePkt[i].IsKeyFrame, prePkt[i].RealTs, client.preRealVideoMs, prePkt[i].Duration, client.iterateDruation)
+		}
+		return prePkt
+	}
+}
+
+func (client *RTSPClient) appendLiveViewVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	prePkt := client.PrePacket
+	client.PrePacket = append(retmap, &av.Packet{
+		Data:            append(binSize(len(nal)), nal...),
+		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
+		Idx:             client.videoIDX,
+		IsKeyFrame:      isKeyFrame,
+		Duration:        client.PreDuration,
+		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
 	})
+	if len(prePkt) == 0 {
+		return nil
+	} else {
+		var prePktTime time.Duration
+		lenPrePkt := len(prePkt)
+		for i := lenPrePkt - 1; i >= 0; i-- {
+			if isKeyFrame {
+				prePkt[i].Duration = client.PreDuration
+			} else {
+				prePktTime = prePkt[i].Time
+				if i+1 == lenPrePkt {
+					prePkt[i].Duration = time.Duration(client.timestamp/TimeBaseFactor)*time.Millisecond - prePkt[i].Time
+				} else {
+					prePkt[i].Duration = (prePkt[i].Time - prePktTime) * time.Millisecond
+				}
+				client.PreDuration = prePkt[i].Duration
+			}
+			// fmt.Println("liveview duration", prePkt[i].IsKeyFrame, prePkt[i].Time.Milliseconds(), prePkt[i].Duration)
+
+		}
+		return prePkt
+	}
 }

@@ -90,6 +90,8 @@ type RTSPClient struct {
 	PreAudioTS          int64
 	PreVideoTS          int64
 	PreSequenceNumber   int
+	PrePacket           []*av.Packet
+	PreDuration         time.Duration
 	FPS                 int
 	WaitCodec           bool
 	chTMP               int
@@ -98,9 +100,9 @@ type RTSPClient struct {
 	end                 int
 	offset              int
 	realVideoTs         int64
-	keyFrameRealVideoTs int64
-	keyFrameIterateDrua int64
-	preDuration         time.Duration
+	preKeyRealVideoTs   int64
+	preRealVideoMs      int64
+	iterateDruation     time.Duration
 	status              string
 	lastPausedTime      time.Time
 }
@@ -538,6 +540,7 @@ func (client *RTSPClient) Seek(customHeaders map[string]string, target int64) er
 	}
 	client.status = PLAY
 	client.PreVideoTS = 0
+	client.PrePacket = nil
 	return nil
 }
 
@@ -706,7 +709,7 @@ func (client *RTSPClient) CodecUpdateVPS(val []byte) {
 // Println mini logging functions
 func (client *RTSPClient) Println(v ...interface{}) {
 	if client.options.Debug {
-		log.Println(v)
+		log.Println(v...)
 	}
 }
 
