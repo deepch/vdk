@@ -373,6 +373,9 @@ func (client *RTSPClient) startStream() {
 }
 
 func (client *RTSPClient) request(method string, customHeaders map[string]string, uri string, one bool, nores bool) (err error) {
+	if client.conn == nil {
+		return
+	}
 	err = client.conn.SetDeadline(time.Now().Add(client.options.ReadWriteTimeout))
 	if err != nil {
 		return
