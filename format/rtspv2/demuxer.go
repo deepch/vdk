@@ -337,18 +337,25 @@ func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []b
 
 			if prePkt[i].IsKeyFrame {
 				if prePkt[i].RealTs == client.preRealVideoMs/1000 {
-					client.iterateDruation += prePkt[i].Duration
+					prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 				} else {
-					client.iterateDruation = 0
 					client.preKeyRealVideoTs = prePkt[i].RealTs
+					prePkt[i].RealTimestamp = client.preKeyRealVideoTs * 1000
+					client.iterateDruation = 0
 				}
 			} else {
-				client.iterateDruation += prePkt[i].Duration
+				prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 			}
-
-			prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
+			client.iterateDruation += prePkt[i].Duration
 			client.preRealVideoMs = prePkt[i].RealTimestamp
-			// fmt.Println("playback duration", prePkt[i].IsKeyFrame, prePkt[i].RealTs, client.preRealVideoMs, prePkt[i].Duration, client.iterateDruation)
+			// fmt.Println("playback duration",
+			// 	prePkt[i].IsKeyFrame,
+			// 	prePkt[i].Time.Milliseconds(),
+			// 	curPkt.Time.Milliseconds(),
+			// 	prePkt[i].RealTs,
+			// 	prePkt[i].RealTimestamp,
+			// 	prePkt[i].Duration,
+			// 	client.iterateDruation)
 		}
 		return prePkt
 	}
