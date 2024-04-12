@@ -2,7 +2,6 @@ package rtspv2
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -338,25 +337,27 @@ func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []b
 
 			if prePkt[i].IsKeyFrame {
 				if prePkt[i].RealTs == client.preRealVideoMs/1000 {
-					client.iterateDruation += prePkt[i].Duration
+					prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 				} else {
-					client.iterateDruation = 0
 					client.preKeyRealVideoTs = prePkt[i].RealTs
+					prePkt[i].RealTimestamp = client.preKeyRealVideoTs * 1000
+					client.iterateDruation = 0
 				}
+				client.iterateDruation += prePkt[i].Duration
 			} else {
+				prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 				client.iterateDruation += prePkt[i].Duration
 			}
 
-			prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 			client.preRealVideoMs = prePkt[i].RealTimestamp
-			fmt.Println("playback duration",
-				prePkt[i].IsKeyFrame,
-				prePkt[i].Time.Milliseconds(),
-				curPkt.Time.Milliseconds(),
-				prePkt[i].RealTs,
-				prePkt[i].RealTimestamp,
-				prePkt[i].Duration,
-				client.iterateDruation)
+			// fmt.Println("playback duration",
+			// 	prePkt[i].IsKeyFrame,
+			// 	prePkt[i].Time.Milliseconds(),
+			// 	curPkt.Time.Milliseconds(),
+			// 	prePkt[i].RealTs,
+			// 	prePkt[i].RealTimestamp,
+			// 	prePkt[i].Duration,
+			// 	client.iterateDruation)
 		}
 		return prePkt
 	}
@@ -389,7 +390,7 @@ func (client *RTSPClient) appendLiveViewVideoPacket(retmap []*av.Packet, nal []b
 				}
 				client.PreDuration = prePkt[i].Duration
 			}
-			fmt.Println("liveview duration", prePkt[i].IsKeyFrame, prePkt[i].Time.Milliseconds(), prePkt[i].Duration)
+			// fmt.Println("liveview duration", prePkt[i].IsKeyFrame, prePkt[i].Time.Milliseconds(), prePkt[i].Duration)
 
 		}
 		return prePkt
