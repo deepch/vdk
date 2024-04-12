@@ -2,6 +2,7 @@ package rtspv2
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"time"
 
@@ -348,7 +349,14 @@ func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []b
 
 			prePkt[i].RealTimestamp = client.preKeyRealVideoTs*1000 + client.iterateDruation.Milliseconds()
 			client.preRealVideoMs = prePkt[i].RealTimestamp
-			// fmt.Println("playback duration", prePkt[i].IsKeyFrame, prePkt[i].RealTs, client.preRealVideoMs, prePkt[i].Duration, client.iterateDruation)
+			fmt.Println("playback duration",
+				prePkt[i].IsKeyFrame,
+				prePkt[i].Time.Milliseconds(),
+				curPkt.Time.Milliseconds(),
+				prePkt[i].RealTs,
+				prePkt[i].RealTimestamp,
+				prePkt[i].Duration,
+				client.iterateDruation)
 		}
 		return prePkt
 	}
@@ -381,7 +389,7 @@ func (client *RTSPClient) appendLiveViewVideoPacket(retmap []*av.Packet, nal []b
 				}
 				client.PreDuration = prePkt[i].Duration
 			}
-			// fmt.Println("liveview duration", prePkt[i].IsKeyFrame, prePkt[i].Time.Milliseconds(), prePkt[i].Duration)
+			fmt.Println("liveview duration", prePkt[i].IsKeyFrame, prePkt[i].Time.Milliseconds(), prePkt[i].Duration)
 
 		}
 		return prePkt
