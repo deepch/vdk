@@ -11,7 +11,6 @@ import (
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/format/mp4"
 	"github.com/google/uuid"
-	"github.com/moby/sys/mountinfo"
 	"github.com/shirou/gopsutil/v3/disk"
 	"os"
 	"path/filepath"
@@ -48,6 +47,7 @@ type Muxer struct {
 	pstart, pend                                                                time.Duration
 	started                                                                     bool
 	serverID, streamName, channelName, streamID, channelID, hostLong, hostShort string
+	handleFileChange                                                            func(string, string, int64, time.Time, time.Time, time.Duration)
 }
 
 type Gof struct {
@@ -75,26 +75,27 @@ func init() {
 
 }
 
-func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpoint []string, patch, format string, limit int) (m *Muxer, err error) {
+func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpoint []string, patch, format string, limit int, c func(string, string, int64, time.Time, time.Time, time.Duration)) (m *Muxer, err error) {
 	hostLong, _ := os.Hostname()
 	var hostShort string
 	if p, _, ok := strings.Cut(hostLong, "."); ok {
 		hostShort = p
 	}
 	m = &Muxer{
-		mpoint:      mpoint,
-		patch:       patch,
-		h:           -1,
-		gof:         &Gof{},
-		format:      format,
-		limit:       limit,
-		serverID:    serverID,
-		streamName:  streamName,
-		channelName: channelName,
-		streamID:    streamID,
-		channelID:   channelID,
-		hostLong:    hostLong,
-		hostShort:   hostShort,
+		mpoint:           mpoint,
+		patch:            patch,
+		h:                -1,
+		gof:              &Gof{},
+		format:           format,
+		limit:            limit,
+		serverID:         serverID,
+		streamName:       streamName,
+		channelName:      channelName,
+		streamID:         streamID,
+		channelID:        channelID,
+		hostLong:         hostLong,
+		hostShort:        hostShort,
+		handleFileChange: c,
 	}
 	return
 }
@@ -236,14 +237,14 @@ func (m *Muxer) filePatch() (string, error) {
 	)
 
 	for i, i2 := range m.mpoint {
-		if m, err := mountinfo.Mounted(i2); err == nil && m {
-			if d, err := disk.Usage(i2); err == nil {
-				if d.UsedPercent < mu {
-					ui = i
-					mu = d.UsedPercent
-				}
+		//if m, err := mountinfo.Mounted(i2); err == nil && m {
+		if d, err := disk.Usage(i2); err == nil {
+			if d.UsedPercent < mu {
+				ui = i
+				mu = d.UsedPercent
 			}
 		}
+		//	}
 	}
 
 	if ui == -1 {
@@ -325,6 +326,15 @@ func (m *Muxer) filePatch() (string, error) {
 	return ts, nil
 }
 
+func (m *Muxer) Codecs() string {
+	var codecs []string
+	for _, stream := range m.gof.Streams {
+		codecs = append(codecs, stream.Type().String())
+	}
+
+	return strings.Join(codecs, ",")
+}
+
 func (m *Muxer) WriteTrailer() (err error) {
 	if m.muxer != nil {
 		m.muxer.WriteTrailer()
@@ -341,6 +351,18 @@ func (m *Muxer) WriteTrailer() (err error) {
 			if err = os.Rename(m.d.Name(), filepath.Join(filepath.Dir(m.d.Name()), filepath.Base(p))); err != nil {
 				return err
 			}
+			var size int64
+			if fi, err := m.d.Stat(); err == nil {
+				size = fi.Size()
+			}
+			m.handleFileChange(
+				m.Codecs(),
+				filepath.Join(filepath.Dir(m.d.Name()), filepath.Base(p)),
+				size,
+				m.start,
+				m.end,
+				m.dur,
+			)
 		}
 		err = m.d.Close()
 	}
