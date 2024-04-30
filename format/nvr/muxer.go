@@ -47,7 +47,7 @@ type Muxer struct {
 	pstart, pend                                                                time.Duration
 	started                                                                     bool
 	serverID, streamName, channelName, streamID, channelID, hostLong, hostShort string
-	handleFileChange                                                            func(string, string, int64, time.Time, time.Time, time.Duration)
+	handleFileChange                                                            func(bool, string, string, int64, time.Time, time.Time, time.Duration)
 }
 
 type Gof struct {
@@ -75,7 +75,7 @@ func init() {
 
 }
 
-func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpoint []string, patch, format string, limit int, c func(string, string, int64, time.Time, time.Time, time.Duration)) (m *Muxer, err error) {
+func NewMuxer(serverID, streamName, channelName, streamID, channelID string, mpoint []string, patch, format string, limit int, c func(bool, string, string, int64, time.Time, time.Time, time.Duration)) (m *Muxer, err error) {
 	hostLong, _ := os.Hostname()
 	var hostShort string
 	if p, _, ok := strings.Cut(hostLong, "."); ok {
@@ -218,9 +218,20 @@ func (m *Muxer) OpenMP4() (err error) {
 	if err = os.MkdirAll(filepath.Dir(d), 0755); err != nil {
 		return
 	}
-	if m.d, err = os.Create(filepath.Join(filepath.Dir(d), fmt.Sprintf("tmp_%s_%d.mp4", uuid.New(), time.Now().Unix()))); err != nil {
+	name := filepath.Join(filepath.Dir(d), fmt.Sprintf("tmp_%s_%d.mp4", uuid.New(), time.Now().Unix()))
+	if m.d, err = os.Create(name); err != nil {
 		return
 	}
+	m.handleFileChange(
+		true,
+		m.Codecs(),
+		name,
+		0,
+		m.start,
+		m.end,
+		m.dur,
+	)
+
 	m.muxer = mp4.NewMuxer(m.d)
 	m.muxer.NegativeTsMakeZero = true
 	if err = m.muxer.WriteHeader(m.gof.Streams); err != nil {
@@ -329,7 +340,7 @@ func (m *Muxer) filePatch() (string, error) {
 func (m *Muxer) Codecs() string {
 	var codecs []string
 	for _, stream := range m.gof.Streams {
-		codecs = append(codecs, stream.Type().String())
+		codecs = append(codecs, strings.ToLower(stream.Type().String()))
 	}
 
 	return strings.Join(codecs, ",")
@@ -356,6 +367,7 @@ func (m *Muxer) WriteTrailer() (err error) {
 				size = fi.Size()
 			}
 			m.handleFileChange(
+				false,
 				m.Codecs(),
 				filepath.Join(filepath.Dir(m.d.Name()), filepath.Base(p)),
 				size,
