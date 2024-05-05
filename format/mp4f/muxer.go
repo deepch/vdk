@@ -27,8 +27,9 @@ type Muxer struct {
 }
 
 func NewMuxer(w *os.File) *Muxer {
-	return &Muxer{}
+	return &Muxer{maxFrames: 5}
 }
+
 func (self *Muxer) SetPath(path string) {
 	self.path = path
 }
@@ -296,7 +297,7 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 		if stream.lastpkt != nil {
 			ts = pkt.Time - stream.lastpkt.Time
 		}
-		got, buf, err := stream.writePacketV3(pkt, ts, 5)
+		got, buf, err := stream.writePacketV3(pkt, ts, element.maxFrames)
 		stream.lastpkt = &pkt
 		if err != nil {
 			return false, []byte{}, err
@@ -307,7 +308,7 @@ func (element *Muxer) WritePacket(pkt av.Packet, GOP bool) (bool, []byte, error)
 	if stream.lastpkt != nil {
 		ts = pkt.Time - stream.lastpkt.Time
 	}
-	got, buf, err := stream.writePacketV2(pkt, ts, 5)
+	got, buf, err := stream.writePacketV2(pkt, ts, element.maxFrames)
 	stream.lastpkt = &pkt
 	if err != nil {
 		return false, []byte{}, err
