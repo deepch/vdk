@@ -257,6 +257,7 @@ type Packet struct {
 	Data            []byte        // packet data
 	RealTimestamp   int64         // packet real time (ms)
 	RealTs          int64         // packet real time (s)
+	CodecData       CodecData     // CodecData for this Packet
 }
 
 // Raw audio frame.

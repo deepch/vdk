@@ -308,8 +308,16 @@ func (client *RTSPClient) appendVideoPacket(retmap []*av.Packet, nal []byte, isK
 	}
 }
 
-func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
-	prePkt := client.PrePacket
+func (client *RTSPClient) createVideoPacket(nal []byte, isKeyFrame bool, isPlayback bool) *av.Packet {
+	var codecData av.CodecData
+	if len(client.CodecData) > 0 {
+		for _, i2 := range client.CodecData {
+			if i2.Type().IsVideo() {
+				codecData = i2
+				break
+			}
+		}
+	}
 	curPkt := &av.Packet{
 		Data:            append(binSize(len(nal)), nal...),
 		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
@@ -317,9 +325,18 @@ func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []b
 		IsKeyFrame:      isKeyFrame,
 		Duration:        client.PreDuration,
 		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
-		RealTimestamp:   0,
-		RealTs:          client.realVideoTs,
+		CodecData:       codecData,
 	}
+	if isPlayback {
+		curPkt.RealTimestamp = 0
+		curPkt.RealTs = client.realVideoTs
+	}
+	return curPkt
+}
+
+func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
+	prePkt := client.PrePacket
+	curPkt := client.createVideoPacket(nal, isKeyFrame, true)
 	client.PrePacket = append(retmap, curPkt)
 	if len(prePkt) == 0 {
 		return nil
@@ -363,14 +380,8 @@ func (client *RTSPClient) appendPlaybackVideoPacket(retmap []*av.Packet, nal []b
 
 func (client *RTSPClient) appendLiveViewVideoPacket(retmap []*av.Packet, nal []byte, isKeyFrame bool) []*av.Packet {
 	prePkt := client.PrePacket
-	client.PrePacket = append(retmap, &av.Packet{
-		Data:            append(binSize(len(nal)), nal...),
-		CompositionTime: time.Duration(TimeDelay) * time.Millisecond,
-		Idx:             client.videoIDX,
-		IsKeyFrame:      isKeyFrame,
-		Duration:        client.PreDuration,
-		Time:            time.Duration(client.timestamp/TimeBaseFactor) * time.Millisecond,
-	})
+	curPkt := client.createVideoPacket(nal, isKeyFrame, false)
+	client.PrePacket = append(retmap, curPkt)
 	if len(prePkt) == 0 {
 		return nil
 	} else {
