@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -521,6 +522,11 @@ func (client *RTSPClient) parseURL(rawURL string) error {
 	}
 	username := l.User.Username()
 	password, _ := l.User.Password()
+	pattern := `[ !#$%&'()*+,/:;=?@\[\]]`
+	re := regexp.MustCompile(pattern)
+	if re.MatchString(username) || re.MatchString(password) {
+		return errors.New("please url encode username and password")
+	}
 	l.User = nil
 	if l.Port() == "" {
 		l.Host = fmt.Sprintf("%s:%s", l.Host, "554")
