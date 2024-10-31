@@ -387,6 +387,36 @@ func ReplayDial(options RTSPClientOptions, startTime string) (*RTSPClient, error
 	return client, nil
 }
 
+func (client *RTSPClient) SeekTime(startTime string) error {
+	// Prepare new PLAY request headers
+	headers := map[string]string{
+		"Require": "onvif-replay",
+		"Range":   "clock=" + startTime + "-"}
+	// Send the PLAY request with the new scale
+	err := client.request(PLAY, headers, client.control, false, true)
+	if err != nil {
+		return fmt.Errorf("failed to change speed: %w", err)
+	}
+	return nil
+}
+
+func (client *RTSPClient) ChangeSpeed(scale float64) error {
+	// Convert scale to string format
+	scaleStr := fmt.Sprintf("%.6f", scale)
+	// Prepare new PLAY request headers
+	headers := map[string]string{
+		"Require": "onvif-replay",
+		"Scale":   scaleStr,
+		"Speed":   "1.000000"}
+	// Send the PLAY request with the new scale
+	err := client.request(PLAY, headers, client.control, false, true)
+	if err != nil {
+		return fmt.Errorf("failed to change speed: %w", err)
+	}
+	client.Println("Speed changed to scale:", scale)
+	return nil
+}
+
 func (client *RTSPClient) ControlTrack(track string) string {
 	if strings.Contains(track, "rtsp://") {
 		return track
