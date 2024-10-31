@@ -109,6 +109,21 @@ type RTSPClientOptions struct {
 }
 
 func Dial(options RTSPClientOptions) (*RTSPClient, error) {
+	u, err := url.Parse(options.URL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Port() == "" {
+		u.Host = fmt.Sprintf("%s:%s", u.Host, "554")
+	}
+	conn, err := net.DialTimeout("tcp", u.Host, options.DialTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return DialWithConn(options, conn)
+}
+
+func DialWithConn(options RTSPClientOptions, conn net.Conn) (*RTSPClient, error) {
 	client := &RTSPClient{
 		headers:             make(map[string]string),
 		Signals:             make(chan int, 100),
@@ -124,10 +139,6 @@ func Dial(options RTSPClientOptions) (*RTSPClient, error) {
 	}
 	client.headers["User-Agent"] = "Lavf58.76.100"
 	err := client.parseURL(html.UnescapeString(client.options.URL))
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialTimeout("tcp", client.pURL.Host, client.options.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
