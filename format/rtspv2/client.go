@@ -558,6 +558,12 @@ func (client *RTSPClient) request(method string, customHeaders map[string]string
 				if splits[0] == "Content-length" {
 					splits[0] = "Content-Length"
 				}
+				if val, ok := res[splits[0]]; ok {
+					if splits[0] == "WWW-Authenticate" && strings.Contains(val, "Digest") && strings.Contains(splits[1], "Basic") {
+						// prioritise digest authentication
+						continue
+					}
+				}
 				res[splits[0]] = splits[1]
 			}
 		}
