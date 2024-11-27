@@ -8,13 +8,13 @@ import (
 )
 
 type OpusCodecData struct {
-	typ            av.CodecType
+	Typ            av.CodecType
 	SampleRate_    int
 	ChannelLayout_ av.ChannelLayout
 }
 
 func (self OpusCodecData) Type() av.CodecType {
-	return self.typ
+	return self.Typ
 }
 
 func (self OpusCodecData) SampleRate() int {
@@ -34,11 +34,11 @@ func (self OpusCodecData) SampleFormat() av.SampleFormat {
 }
 
 type PCMUCodecData struct {
-	typ av.CodecType
+	Typ av.CodecType
 }
 
 func (self PCMUCodecData) Type() av.CodecType {
-	return self.typ
+	return self.Typ
 }
 
 func (self PCMUCodecData) SampleRate() int {
@@ -59,24 +59,24 @@ func (self PCMUCodecData) PacketDuration(data []byte) (time.Duration, error) {
 
 func NewPCMMulawCodecData() av.AudioCodecData {
 	return PCMUCodecData{
-		typ: av.PCM_MULAW,
+		Typ: av.PCM_MULAW,
 	}
 }
 
 func NewPCMCodecData() av.AudioCodecData {
 	return PCMUCodecData{
-		typ: av.PCM,
+		Typ: av.PCM,
 	}
 }
 
 func NewPCMAlawCodecData() av.AudioCodecData {
 	return PCMUCodecData{
-		typ: av.PCM_ALAW,
+		Typ: av.PCM_ALAW,
 	}
 }
 func NewOpusCodecData(sr int, cc av.ChannelLayout) av.AudioCodecData {
 	return OpusCodecData{
-		typ:            av.OPUS,
+		Typ:            av.OPUS,
 		SampleRate_:    sr,
 		ChannelLayout_: cc,
 	}
