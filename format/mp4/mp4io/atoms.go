@@ -1,6 +1,7 @@
 package mp4io
 
 import (
+	"log"
 	"time"
 
 	"github.com/deepch/vdk/utils/bits/pio"
@@ -24,17 +25,18 @@ func (self AVC1Desc) Tag() Tag {
 	return AVC1
 }
 
-//0x31766568
+// 0x31766568
 const HEV1 = Tag(0x68766331)
 
 func (self HV1Desc) Tag() Tag {
 	return HEV1
 }
 
-//const HVC1 = Tag(0x68766331)
-//func (self HVC1Desc) Tag() Tag {
-//	return HVC1
-//}
+// const HVC1 = Tag(0x68766331)
+//
+//	func (self HVC1Desc) Tag() Tag {
+//		return HVC1
+//	}
 const URL = Tag(0x75726c20)
 
 func (self DataReferUrl) Tag() Tag {
@@ -571,6 +573,11 @@ func (self *Track) Unmarshal(b []byte, offset int) (n int, err error) {
 	for n+8 < len(b) {
 		tag := Tag(pio.U32BE(b[n+4:]))
 		size := int(pio.U32BE(b[n:]))
+		if size > 5242880 {
+			log.Println("track size", size)
+			err = parseErr("_len_Entries", 5242880, err)
+			return
+		}
 		if len(b) < n+size {
 			err = parseErr("TagSizeInvalid", n+offset, err)
 			return
@@ -2552,6 +2559,10 @@ func (self *TimeToSample) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]TimeToSampleEntry, _len_Entries)
 	if len(b) < n+LenTimeToSampleEntry*len(self.Entries) {
 		err = parseErr("TimeToSampleEntry", n+offset, err)
@@ -2636,6 +2647,10 @@ func (self *SampleToChunk) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]SampleToChunkEntry, _len_Entries)
 	if len(b) < n+LenSampleToChunkEntry*len(self.Entries) {
 		err = parseErr("SampleToChunkEntry", n+offset, err)
@@ -2723,6 +2738,10 @@ func (self *CompositionOffset) Unmarshal(b []byte, offset int) (n int, err error
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]CompositionOffsetEntry, _len_Entries)
 	if len(b) < n+LenCompositionOffsetEntry*len(self.Entries) {
 		err = parseErr("CompositionOffsetEntry", n+offset, err)
@@ -2807,6 +2826,10 @@ func (self *SyncSample) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]uint32, _len_Entries)
 	if len(b) < n+4*len(self.Entries) {
 		err = parseErr("uint32", n+offset, err)
@@ -2874,6 +2897,10 @@ func (self *ChunkOffset) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]uint32, _len_Entries)
 	if len(b) < n+4*len(self.Entries) {
 		err = parseErr("uint32", n+offset, err)
@@ -3388,6 +3415,11 @@ func (self *SampleSize) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		log.Println("_len_Entries", _len_Entries)
+		return
+	}
 	self.Entries = make([]uint32, _len_Entries)
 	if len(b) < n+4*len(self.Entries) {
 		err = parseErr("uint32", n+offset, err)
@@ -3520,6 +3552,10 @@ func (self *TrackFragRun) Unmarshal(b []byte, offset int) (n int, err error) {
 	var _len_Entries uint32
 	_len_Entries = pio.U32BE(b[n:])
 	n += 4
+	if _len_Entries > 5242880 {
+		err = parseErr("_len_Entries", 5242880, err)
+		return
+	}
 	self.Entries = make([]TrackFragRunEntry, _len_Entries)
 	if self.Flags&TRUN_DATA_OFFSET != 0 {
 		{
