@@ -1,6 +1,7 @@
 package mp4io
 
 import (
+	"errors"
 	"time"
 
 	"github.com/deepch/vdk/utils/bits/pio"
@@ -24,17 +25,18 @@ func (self AVC1Desc) Tag() Tag {
 	return AVC1
 }
 
-//0x31766568
+// 0x31766568
 const HEV1 = Tag(0x68766331)
 
 func (self HV1Desc) Tag() Tag {
 	return HEV1
 }
 
-//const HVC1 = Tag(0x68766331)
-//func (self HVC1Desc) Tag() Tag {
-//	return HVC1
-//}
+// const HVC1 = Tag(0x68766331)
+//
+//	func (self HVC1Desc) Tag() Tag {
+//		return HVC1
+//	}
 const URL = Tag(0x75726c20)
 
 func (self DataReferUrl) Tag() Tag {
@@ -304,6 +306,10 @@ func (self *Movie) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("trak", n+offset, err)
 					return
 				}
+				if len(self.Tracks) > 100 {
+					err = errors.New("too many tracks")
+					return
+				}
 				self.Tracks = append(self.Tracks, atom)
 			}
 		default:
@@ -311,6 +317,10 @@ func (self *Movie) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -599,6 +609,10 @@ func (self *Track) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -940,6 +954,10 @@ func (self *Media) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("", n+offset, err)
 					return
 				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
+					return
+				}
 				self.Unknowns = append(self.Unknowns, atom)
 			}
 		}
@@ -1173,6 +1191,10 @@ func (self *MediaInfo) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("", n+offset, err)
 					return
 				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
+					return
+				}
 				self.Unknowns = append(self.Unknowns, atom)
 			}
 		}
@@ -1253,6 +1275,10 @@ func (self *DataInfo) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -1817,6 +1843,10 @@ func (self *SampleDesc) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("", n+offset, err)
 					return
 				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
+					return
+				}
 				self.Unknowns = append(self.Unknowns, atom)
 			}
 		}
@@ -1980,6 +2010,10 @@ func (self *MP4ADesc) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -2291,6 +2325,10 @@ func (self *AVC1Desc) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("", n+offset, err)
 					return
 				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
+					return
+				}
 				self.Unknowns = append(self.Unknowns, atom)
 			}
 		}
@@ -2409,6 +2447,10 @@ func (self *HV1Desc) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -2954,6 +2996,10 @@ func (self *MovieFrag) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("traf", n+offset, err)
 					return
 				}
+				if len(self.Tracks) > 100 {
+					err = errors.New("too many tracks")
+					return
+				}
 				self.Tracks = append(self.Tracks, atom)
 			}
 		default:
@@ -2961,6 +3007,10 @@ func (self *MovieFrag) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
@@ -3127,6 +3177,10 @@ func (self *TrackFrag) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("", n+offset, err)
 					return
 				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
+					return
+				}
 				self.Unknowns = append(self.Unknowns, atom)
 			}
 		}
@@ -3197,6 +3251,10 @@ func (self *MovieExtend) Unmarshal(b []byte, offset int) (n int, err error) {
 					err = parseErr("trex", n+offset, err)
 					return
 				}
+				if len(self.Tracks) > 100 {
+					err = errors.New("too many tracks")
+					return
+				}
 				self.Tracks = append(self.Tracks, atom)
 			}
 		default:
@@ -3204,6 +3262,10 @@ func (self *MovieExtend) Unmarshal(b []byte, offset int) (n int, err error) {
 				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
 				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
 					err = parseErr("", n+offset, err)
+					return
+				}
+				if len(self.Unknowns) > 100 {
+					err = errors.New("too many unknowns")
 					return
 				}
 				self.Unknowns = append(self.Unknowns, atom)
