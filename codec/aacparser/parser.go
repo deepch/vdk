@@ -21,13 +21,16 @@ const (
 	AOT_TWINVQ                      ///< N                       Twin Vector Quantizer
 	AOT_CELP                        ///< N                       Code Excited Linear Prediction
 	AOT_HVXC                        ///< N                       Harmonic Vector eXcitation Coding
-	AOT_TTSI            = 12 + iota ///< N                       Text-To-Speech Interface
+	_
+	_
+	AOT_TTSI                        ///< N                       Text-To-Speech Interface
 	AOT_MAINSYNTH                   ///< N                       Main Synthesis
 	AOT_WAVESYNTH                   ///< N                       Wavetable Synthesis
 	AOT_MIDI                        ///< N                       General MIDI
 	AOT_SAFX                        ///< N                       Algorithmic Synthesis and Audio Effects
 	AOT_ER_AAC_LC                   ///< N                       Error Resilient Low Complexity
-	AOT_ER_AAC_LTP      = 19 + iota ///< N                       Error Resilient Long Term Prediction
+	_
+	AOT_ER_AAC_LTP                  ///< N                       Error Resilient Long Term Prediction
 	AOT_ER_AAC_SCALABLE             ///< N                       Error Resilient Scalable
 	AOT_ER_TWINVQ                   ///< N                       Error Resilient Twin Vector Quantizer
 	AOT_ER_BSAC                     ///< N                       Error Resilient Bit-Sliced Arithmetic Coding
