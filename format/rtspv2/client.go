@@ -387,14 +387,17 @@ func ReplayDial(options RTSPClientOptions, startTime string) (*RTSPClient, error
 	return client, nil
 }
 
-func (client *RTSPClient) SeekTime(startTime string) error {
+func (client *RTSPClient) SeekTime(startTime string, scale float64, endTime string) error {
 	// Prepare new PLAY request headers
+	scaleStr := fmt.Sprintf("%.6f", scale)
 	headers := map[string]string{
 		"Require": "onvif-replay",
-		"Range":   "clock=" + startTime + "-"}
+		"Scale":   scaleStr,
+		"Range": "clock=" + startTime + "-" + endTime}
 	// Send the PLAY request with the new scale
 	err := client.request(PLAY, headers, client.control, false, true)
 	if err != nil {
+		client.Println("Failed to Change SEEKTIME", err)
 		return fmt.Errorf("failed to change speed: %w", err)
 	}
 	return nil
