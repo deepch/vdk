@@ -955,10 +955,6 @@ func (self *Conn) writeAMF0Msg(msgtypeid uint8, csid, msgsid uint32, args ...int
 func (self *Conn) fillChunk3Header(b []byte, csid uint32, timestamp uint32) (n int) {
 	b[n] = (byte(csid) & 0x3f) | 0xC0
 	n++
-	if timestamp >= 0xffffff {
-		pio.PutU32BE(b[n:], timestamp)
-		n += 4
-	}
 	return
 }
 
