@@ -663,7 +663,12 @@ func (client *RTSPClient) parseURL(rawURL string) error {
 	password, _ := l.User.Password()
 	l.User = nil
 	if l.Port() == "" {
-		l.Host = fmt.Sprintf("%s:%s", l.Host, "554")
+		switch l.Scheme {
+		case "rtsps":
+			l.Host = fmt.Sprintf("%s:%s", l.Host, "322")
+		default:
+			l.Host = fmt.Sprintf("%s:%s", l.Host, "554")
+		}
 	}
 	if l.Scheme != "rtsp" && l.Scheme != "rtsps" {
 		l.Scheme = "rtsp"
