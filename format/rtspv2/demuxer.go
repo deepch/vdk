@@ -2,12 +2,13 @@ package rtspv2
 
 import (
 	"encoding/binary"
+	"math"
+	"time"
+
 	"github.com/deepch/vdk/av"
 	"github.com/deepch/vdk/codec/aacparser"
 	"github.com/deepch/vdk/codec/h264parser"
 	"github.com/deepch/vdk/codec/h265parser"
-	"math"
-	"time"
 )
 
 const (
@@ -86,17 +87,11 @@ func (client *RTSPClient) handleVideo(content []byte) ([]*av.Packet, bool) {
 		client.BufferRtpPacket.Truncate(0)
 		client.BufferRtpPacket.Reset()
 	}
-	nalRaw, _ := h264parser.SplitNALUs(content[client.offset:client.end])
-	if len(nalRaw) == 0 || len(nalRaw[0]) == 0 {
-		return nil, false
-	}
 	var retmap []*av.Packet
-	for _, nal := range nalRaw {
-		if client.videoCodec == av.H265 {
-			retmap = client.handleH265Payload(nal, retmap)
-		} else if client.videoCodec == av.H264 {
-			retmap = client.handleH264Payload(content, nal, retmap)
-		}
+	if client.videoCodec == av.H265 {
+		retmap = client.handleH265Payload(content[client.offset:client.end], retmap)
+	} else if client.videoCodec == av.H264 {
+		retmap = client.handleH264Payload(content[client.offset:client.end], retmap)
 	}
 	if len(retmap) > 0 {
 		client.PreVideoTS = client.timestamp
@@ -106,19 +101,23 @@ func (client *RTSPClient) handleVideo(content []byte) ([]*av.Packet, bool) {
 	return nil, false
 }
 
-func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Packet) []*av.Packet {
-	naluType := nal[0] & 0x1f
+func (client *RTSPClient) handleH264Payload(rtpPayload []byte, retmap []*av.Packet) []*av.Packet {
+	naluType := rtpPayload[0] & 0x1f
 	switch {
-	case naluType >= 1 && naluType <= 5:
-		retmap = client.appendVideoPacket(retmap, nal, naluType == 5)
+	case naluType >= h264parser.NALU_NON_IDR_SLICE && naluType <= h264parser.NALU_IDR_SLICE:
+		retmap = client.appendVideoPacket(retmap, rtpPayload, naluType == h264parser.NALU_IDR_SLICE)
 	case naluType == h264parser.NALU_SPS:
-		client.CodecUpdateSPS(nal)
+		client.CodecUpdateSPS(rtpPayload)
 	case naluType == h264parser.NALU_PPS:
-		client.CodecUpdatePPS(nal)
-	case naluType == 24:
-		packet := nal[1:]
+		client.CodecUpdatePPS(rtpPayload)
+	case naluType == h264parser.NALU_STAP_A:
+		packet := rtpPayload[1:]
 		for len(packet) >= 2 {
 			size := int(packet[0])<<8 | int(packet[1])
+			// If the packet is corrupted, size can be negative.
+			if size <= 0 {
+				break
+			}
 			if size+2 > len(packet) {
 				break
 			}
@@ -133,9 +132,32 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 			}
 			packet = packet[size+2:]
 		}
-	case naluType == 28:
-		fuIndicator := content[client.offset]
-		fuHeader := content[client.offset+1]
+	case naluType == h264parser.NALU_STAP_B:
+		packet := rtpPayload[3:]
+		for len(packet) >= 2 {
+			size := int(packet[0])<<8 | int(packet[1])
+			if size <= 0 {
+				break
+			}
+			if size+2 > len(packet) {
+				break
+			}
+			naluTypefs := packet[2] & 0x1f
+			switch {
+			case naluTypefs >= 1 && naluTypefs <= 5:
+				retmap = client.appendVideoPacket(retmap, packet[2:size+2], naluTypefs == 5)
+			case naluTypefs == h264parser.NALU_SPS:
+				client.CodecUpdateSPS(packet[2 : size+2])
+			case naluTypefs == h264parser.NALU_PPS:
+				client.CodecUpdatePPS(packet[2 : size+2])
+			}
+			packet = packet[size+2:]
+		}
+	case naluType == h264parser.NALU_MTAP16:
+	case naluType == h264parser.NALU_MTAP24:
+	case naluType == h264parser.NALU_FU_A:
+		fuIndicator := rtpPayload[0]
+		fuHeader := rtpPayload[1]
 		isStart := fuHeader&0x80 != 0
 		isEnd := fuHeader&0x40 != 0
 		if isStart {
@@ -145,7 +167,7 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 			client.BufferRtpPacket.Write([]byte{fuIndicator&0xe0 | fuHeader&0x1f})
 		}
 		if client.fuStarted {
-			client.BufferRtpPacket.Write(content[client.offset+2 : client.end])
+			client.BufferRtpPacket.Write(rtpPayload[2:])
 			if isEnd {
 				client.fuStarted = false
 				naluTypef := client.BufferRtpPacket.Bytes()[0] & 0x1f
@@ -168,44 +190,43 @@ func (client *RTSPClient) handleH264Payload(content, nal []byte, retmap []*av.Pa
 				retmap = client.appendVideoPacket(retmap, client.BufferRtpPacket.Bytes(), naluTypef == 5)
 			}
 		}
+	case naluType == h264parser.NALU_FU_B:
 	default:
-		//client.Println("Unsupported NAL Type", naluType)
 	}
 
 	return retmap
 }
 
-func (client *RTSPClient) handleH265Payload(nal []byte, retmap []*av.Packet) []*av.Packet {
-	naluType := (nal[0] >> 1) & 0x3f
+func (client *RTSPClient) handleH265Payload(rtpPayload []byte, retmap []*av.Packet) []*av.Packet {
+	naluType := (rtpPayload[0] >> 1) & 0x3f
 	switch naluType {
 	case h265parser.NAL_UNIT_CODED_SLICE_TRAIL_R:
-		retmap = client.appendVideoPacket(retmap, nal, false)
+		retmap = client.appendVideoPacket(retmap, rtpPayload, false)
 	case h265parser.NAL_UNIT_VPS:
-		client.CodecUpdateVPS(nal)
+		client.CodecUpdateVPS(rtpPayload)
 	case h265parser.NAL_UNIT_SPS:
-		client.CodecUpdateSPS(nal)
+		client.CodecUpdateSPS(rtpPayload)
 	case h265parser.NAL_UNIT_PPS:
-		client.CodecUpdatePPS(nal)
-	case h265parser.NAL_UNIT_UNSPECIFIED_49:
-		se := nal[2] >> 6
-		naluType := nal[2] & 0x3f
+		client.CodecUpdatePPS(rtpPayload)
+	case h265parser.NAL_UNIT_FU:
+		se := rtpPayload[2] >> 6
+		naluType := rtpPayload[2] & 0x3f
 		switch se {
 		case 2:
 			client.BufferRtpPacket.Truncate(0)
 			client.BufferRtpPacket.Reset()
-			client.BufferRtpPacket.Write([]byte{(nal[0] & 0x81) | (naluType << 1), nal[1]})
+			client.BufferRtpPacket.Write([]byte{(rtpPayload[0] & 0x81) | (naluType << 1), rtpPayload[1]})
 			r := make([]byte, 2)
-			r[1] = nal[1]
-			r[0] = (nal[0] & 0x81) | (naluType << 1)
-			client.BufferRtpPacket.Write(nal[3:])
+			r[1] = rtpPayload[1]
+			r[0] = (rtpPayload[0] & 0x81) | (naluType << 1)
+			client.BufferRtpPacket.Write(rtpPayload[3:])
 		case 1:
-			client.BufferRtpPacket.Write(nal[3:])
+			client.BufferRtpPacket.Write(rtpPayload[3:])
 			retmap = client.appendVideoPacket(retmap, client.BufferRtpPacket.Bytes(), naluType == h265parser.NAL_UNIT_CODED_SLICE_IDR_W_RADL)
 		default:
-			client.BufferRtpPacket.Write(nal[3:])
+			client.BufferRtpPacket.Write(rtpPayload[3:])
 		}
 	default:
-		//client.Println("Unsupported Nal", naluType)
 	}
 	return retmap
 }
