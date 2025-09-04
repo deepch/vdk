@@ -13,10 +13,21 @@ import (
 )
 
 const (
-	NALU_SEI = 6
-	NALU_SPS = 7
-	NALU_PPS = 8
-	NALU_AUD = 9
+	NALU_NON_IDR_SLICE    = 1
+	NALU_DATA_PARTITION_A = 2
+	NALU_DATA_PARTITION_B = 3
+	NALU_DATA_PARTITION_C = 4
+	NALU_IDR_SLICE        = 5
+	NALU_SEI              = 6
+	NALU_SPS              = 7
+	NALU_PPS              = 8
+	NALU_AUD              = 9
+	NALU_STAP_A           = 24
+	NALU_STAP_B           = 25
+	NALU_MTAP16           = 26
+	NALU_MTAP24           = 27
+	NALU_FU_A             = 28
+	NALU_FU_B             = 29
 )
 
 func IsDataNALU(b []byte) bool {
