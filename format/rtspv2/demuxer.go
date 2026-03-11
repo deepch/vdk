@@ -226,14 +226,26 @@ func (client *RTSPClient) handleAudio(content []byte) ([]*av.Packet, bool) {
 			duration = time.Duration(20) * time.Millisecond
 			retmap = client.appendAudioPacket(retmap, nal, duration)
 		case av.AAC:
+			if len(nal) < 2 {
+				break
+			}
 			auHeadersLength := uint16(0) | (uint16(nal[0]) << 8) | uint16(nal[1])
 			auHeadersCount := auHeadersLength >> 4
 			framesPayloadOffset := 2 + int(auHeadersCount)<<1
+			if framesPayloadOffset > len(nal) {
+				break
+			}
 			auHeaders := nal[2:framesPayloadOffset]
 			framesPayload := nal[framesPayloadOffset:]
 			for i := 0; i < int(auHeadersCount); i++ {
+				if len(auHeaders) < 2 {
+					break
+				}
 				auHeader := uint16(0) | (uint16(auHeaders[0]) << 8) | uint16(auHeaders[1])
 				frameSize := auHeader >> 3
+				if int(frameSize) > len(framesPayload) {
+					break
+				}
 				frame := framesPayload[:frameSize]
 				auHeaders = auHeaders[2:]
 				framesPayload = framesPayload[frameSize:]
