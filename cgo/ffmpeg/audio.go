@@ -24,6 +24,12 @@ import (
 
 const debug = false
 
+func avOptSetInt(obj unsafe.Pointer, name string, val C.int64_t) {
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	C.av_opt_set_int(obj, cname, val, 0)
+}
+
 type Resampler struct {
 	inSampleFormat, OutSampleFormat   av.SampleFormat
 	inChannelLayout, OutChannelLayout av.ChannelLayout
@@ -82,12 +88,12 @@ func (self *Resampler) Resample(in av.AudioFrame) (out av.AudioFrame, err error)
 		self.inSampleRate = in.SampleRate
 		self.inChannelLayout = in.ChannelLayout
 		avr := C.avresample_alloc_context()
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("in_channel_layout"), C.int64_t(channelLayoutAV2FF(self.inChannelLayout)), 0)
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("out_channel_layout"), C.int64_t(channelLayoutAV2FF(self.OutChannelLayout)), 0)
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("in_sample_rate"), C.int64_t(self.inSampleRate), 0)
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("out_sample_rate"), C.int64_t(self.OutSampleRate), 0)
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("in_sample_fmt"), C.int64_t(sampleFormatAV2FF(self.inSampleFormat)), 0)
-		C.av_opt_set_int(unsafe.Pointer(avr), C.CString("out_sample_fmt"), C.int64_t(sampleFormatAV2FF(self.OutSampleFormat)), 0)
+		avOptSetInt(unsafe.Pointer(avr), "in_channel_layout", C.int64_t(channelLayoutAV2FF(self.inChannelLayout)))
+		avOptSetInt(unsafe.Pointer(avr), "out_channel_layout", C.int64_t(channelLayoutAV2FF(self.OutChannelLayout)))
+		avOptSetInt(unsafe.Pointer(avr), "in_sample_rate", C.int64_t(self.inSampleRate))
+		avOptSetInt(unsafe.Pointer(avr), "out_sample_rate", C.int64_t(self.OutSampleRate))
+		avOptSetInt(unsafe.Pointer(avr), "in_sample_fmt", C.int64_t(sampleFormatAV2FF(self.inSampleFormat)))
+		avOptSetInt(unsafe.Pointer(avr), "out_sample_fmt", C.int64_t(sampleFormatAV2FF(self.OutSampleFormat)))
 		C.avresample_open(avr)
 		self.avr = avr
 	}
@@ -244,7 +250,9 @@ func (self *AudioEncoder) SetOption(key string, val interface{}) (err error) {
 
 	sval := fmt.Sprint(val)
 	if key == "profile" {
-		ff.profile = C.avcodec_profile_name_to_int(ff.codec, C.CString(sval))
+		csval := C.CString(sval)
+		defer C.free(unsafe.Pointer(csval))
+		ff.profile = C.avcodec_profile_name_to_int(ff.codec, csval)
 		if ff.profile == C.FF_PROFILE_UNKNOWN {
 			err = fmt.Errorf("ffmpeg: profile `%s` invalid", sval)
 			return
@@ -252,13 +260,18 @@ func (self *AudioEncoder) SetOption(key string, val interface{}) (err error) {
 		return
 	}
 
-	C.av_dict_set(&ff.options, C.CString(key), C.CString(sval), 0)
+	ckey, cval := C.CString(key), C.CString(sval)
+	defer C.free(unsafe.Pointer(ckey))
+	defer C.free(unsafe.Pointer(cval))
+	C.av_dict_set(&ff.options, ckey, cval, 0)
 	return
 }
 
 func (self *AudioEncoder) GetOption(key string, val interface{}) (err error) {
 	ff := &self.ff.ff
-	entry := C.av_dict_get(ff.options, C.CString(key), nil, 0)
+	ckey := C.CString(key)
+	defer C.free(unsafe.Pointer(ckey))
+	entry := C.av_dict_get(ff.options, ckey, nil, 0)
 	if entry == nil {
 		err = fmt.Errorf("ffmpeg: GetOption failed: `%s` not exists", key)
 		return
@@ -642,7 +655,9 @@ func NewAudioEncoderByCodecType(typ av.CodecType) (enc *AudioEncoder, err error)
 func NewAudioEncoderByName(name string) (enc *AudioEncoder, err error) {
 	_enc := &AudioEncoder{}
 
-	codec := C.avcodec_find_encoder_by_name(C.CString(name))
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	codec := C.avcodec_find_encoder_by_name(cname)
 	if codec == nil || C.avcodec_get_type(codec.id) != C.AVMEDIA_TYPE_AUDIO {
 		err = fmt.Errorf("ffmpeg: cannot find audio encoder name=%s", name)
 		return

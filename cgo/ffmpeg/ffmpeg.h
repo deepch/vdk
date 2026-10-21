@@ -4,6 +4,7 @@
 #include <libavutil/avutil.h>
 #include <libavresample/avresample.h>
 #include <libavutil/opt.h>
+#include <stdlib.h>
 #include <string.h>
 #include <libswscale/swscale.h>
 

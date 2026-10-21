@@ -26,11 +26,15 @@ const (
 )
 
 func HasEncoder(name string) bool {
-	return C.avcodec_find_encoder_by_name(C.CString(name)) != nil
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	return C.avcodec_find_encoder_by_name(cname) != nil
 }
 
 func HasDecoder(name string) bool {
-	return C.avcodec_find_decoder_by_name(C.CString(name)) != nil
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	return C.avcodec_find_decoder_by_name(cname) != nil
 }
 
 //func EncodersList() []string
