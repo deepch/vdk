@@ -566,6 +566,10 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 	n++
 	n++
 
+	if len(b) < n+1 {
+		err = ErrDecconfInvalid
+		return
+	}
 	spscount := int(b[n])
 	n++
 
@@ -588,6 +592,10 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 	n++
 	n++
 
+	if len(b) < n+1 {
+		err = ErrDecconfInvalid
+		return
+	}
 	ppscount := int(b[n])
 	n++
 

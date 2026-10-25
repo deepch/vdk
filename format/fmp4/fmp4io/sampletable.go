@@ -83,6 +83,10 @@ func (a *SampleTable) Unmarshal(b []byte, offset int) (n int, err error) {
 	for n+8 < len(b) {
 		tag := Tag(pio.U32BE(b[n+4:]))
 		size := int(pio.U32BE(b[n:]))
+		if size < 8 {
+			err = parseErr("TagSizeInvalid", n+offset, err)
+			return
+		}
 		if len(b) < n+size {
 			err = parseErr("TagSizeInvalid", n+offset, err)
 			return
@@ -270,6 +274,10 @@ func (a *SampleDesc) Unmarshal(b []byte, offset int) (n int, err error) {
 	for n+8 < len(b) {
 		tag := Tag(pio.U32BE(b[n+4:]))
 		size := int(pio.U32BE(b[n:]))
+		if size < 8 {
+			err = parseErr("TagSizeInvalid", n+offset, err)
+			return
+		}
 		if len(b) < n+size {
 			err = parseErr("TagSizeInvalid", n+offset, err)
 			return
