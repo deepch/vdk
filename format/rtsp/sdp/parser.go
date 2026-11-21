@@ -48,7 +48,7 @@ func Parse(content string) (sess Session, medias []Media) {
 
 			switch typeval[0] {
 			case "m":
-				if len(fields) > 0 {
+				if len(fields) > 1 {
 					switch fields[0] {
 					case "audio", "video":
 						medias = append(medias, Media{AVType: fields[0]})
